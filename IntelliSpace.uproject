@@ -24,6 +24,11 @@
 		{
 			"Name": "ImagePlate",
 			"Enabled": true
-		}
+		},
+        {
+          "Name": "NNERuntimeORT",
+          "Enabled": true
+        }
+
 	]
 }

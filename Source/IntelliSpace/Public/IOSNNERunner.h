@@ -1,22 +1,24 @@
 #pragma once
 
 #include "CoreMinimal.h"
-// Any other headers you need here
-
-
-
+#include "NNETypes.h"
+#include "PlatformNNERunner.h"
 #include <onnxruntime/core/session/onnxruntime_cxx_api.h>
 #include "IOSNNERunner.generated.h"
 
 UCLASS()
-class INTELLISPACE_API UIOSNNERunner : public UObject
+class INTELLISPACE_API UIOSNNERunner : public UPlatformNNERunner
 {
     GENERATED_BODY()
 
 public:
-    bool InitializeModel(const FString& ModelPath);
-    bool RunInference(const TArray<float>& InputTensor, int Width, int Height, TArray<float>& OutMaskTensor);
+    virtual bool InitializeModel(const FString& ModelPath) override;
+    
+    virtual bool RunInference(const TArray<float>& InputTensor, int Width, int Height, TArray<float>& OutMaskTensor, TArray<TArray<float>>& OutputTensors, TArray<UE::NNE::FTensorBindingCPU>& OutputBindings) override;
+    
 
 private:
     TUniquePtr<Ort::Session> Session;
 };
+
+

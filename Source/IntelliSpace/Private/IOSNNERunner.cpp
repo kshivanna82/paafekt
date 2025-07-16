@@ -1,8 +1,9 @@
-#if PLATFORM_IOS
-
 #include "IOSNNERunner.h"
+
 #include "HAL/PlatformFilemanager.h"
 #include "Misc/Paths.h"
+
+#if PLATFORM_IOS
 
 #include <onnxruntime/core/session/onnxruntime_cxx_api.h>
 
@@ -15,7 +16,8 @@ bool UIOSNNERunner::InitializeModel(const FString& ModelPath)
     return true;
 }
 
-bool UIOSNNERunner::RunInference(const TArray<float>& InputTensor, int Width, int Height, TArray<float>& OutMaskTensor)
+bool UIOSNNERunner::RunInference(const TArray<float>& InputTensor, int Width, int Height, TArray<float>& OutMaskTensor, TArray<TArray<float>>& OutputTensors,
+                                 TArray<UE::NNE::FTensorBindingCPU>& OutputBindings)
 {
     const int64 InputDims[] = {1, 3, Height, Width};
     Ort::MemoryInfo MemInfo = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
@@ -33,4 +35,23 @@ bool UIOSNNERunner::RunInference(const TArray<float>& InputTensor, int Width, in
     return true;
 }
 
+#else
+
+// Stub fallback for Mac to satisfy linker
+
+bool UIOSNNERunner::InitializeModel(const FString&)
+{
+    return false;
+}
+
+bool UIOSNNERunner::RunInference(const TArray<float>&, int, int,
+                                 TArray<float>&,
+                                 TArray<TArray<float>>&,
+                                 TArray<UE::NNE::FTensorBindingCPU>&)
+{
+    // Dummy implementation
+    return false;
+}
+
 #endif
+
