@@ -49,46 +49,46 @@ protected:
 public:
     virtual void Tick(float DeltaTime) override;
     
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         USceneComponent* rootComp;
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UStaticMeshComponent* Screen_Raw;
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UStaticMeshComponent* Screen_Post;
     
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera, meta = (ClampMin = 0, UIMin = 0))
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera, meta = (ClampMin = 0, UIMin = 0))
         int32 CameraID;
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera, meta = (ClampMin = 0, UIMin = 0))
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera, meta = (ClampMin = 0, UIMin = 0))
         int32 VideoTrackID;
     
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera, meta = (ClampMin = 0, UIMin = 0))
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera, meta = (ClampMin = 0, UIMin = 0))
         float RefreshRate;
-    UPROPERTY(BluePrintReadWrite, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, Category = Camera)
         float RefreshTimer;
-    UPROPERTY(BluePrintReadWrite, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, Category = Camera)
         bool isStreamOpen;
-    UPROPERTY(BluePrintReadWrite, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, Category = Camera)
         FVector2D VideoSize;
     
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         float Brightness;
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         float Multiply;
     
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UMediaPlayer* Camera_MediaPlayer;
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UMediaTexture* Camera_MediaTexture;
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UTextureRenderTarget2D* Camera_RenderTarget;
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UMaterialInstanceDynamic* Camera_MatRaw;
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UMaterialInstanceDynamic* Camera_MatPost;
     
-    UPROPERTY(BluePrintReadWrite, VisibleAnyWhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, VisibleAnyWhere, Category = Camera)
         UTexture2D* Camera_Texture2D;
-    UPROPERTY(BluePrintReadWrite, VisibleAnyWhere, Category = Camera)
+    UPROPERTY(BlueprintReadWrite, VisibleAnyWhere, Category = Camera)
         TArray<FColor> ColorData;
     
 
@@ -123,11 +123,11 @@ public:
 //    #endif
 
 
-    UFUNCTION(BluePrintImplementableEvent, Category = Camera)
+    UFUNCTION(BlueprintImplementableEvent, Category = Camera)
         void OnNextVideoFrame();
-    UFUNCTION(BluePrintCallable, Category = Camera)
+    UFUNCTION(BlueprintCallable, Category = Camera)
         bool ReadFrame();
-    UFUNCTION(BluePrintCallable, Category = "File I/O")
+    UFUNCTION(BlueprintCallable, Category = "File I/O")
         static FString LoadFileToString(FString Filename);
     
     void ProcessInputForModel();

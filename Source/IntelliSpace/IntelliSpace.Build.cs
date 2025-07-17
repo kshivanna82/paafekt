@@ -19,13 +19,33 @@ public class IntelliSpace : ModuleRules
         
 
         	//string ONNXLibPath = Path.Combine(ONNXRoot, "include", "lib", "iOS");
-        	string ONNXLibPath = Path.Combine(ONNXIncludePath, "lib", "iOS");
-        	PublicIncludePaths.Add(Path.Combine(ONNXRoot, "build_ios", "Release", "_deps", "onnx-src"));
+        	//string ONNXLibPath = Path.Combine(ONNXIncludePath, "lib", "iOS");
+        	//PublicIncludePaths.Add(Path.Combine(ONNXRoot, "build_ios", "Release", "_deps", "onnx-src"));
 
         
         
         	// ONNX Headers
-        	PublicIncludePaths.Add(ONNXIncludePath);
+        	//PublicIncludePaths.Add(ONNXIncludePath);
+         
+            string ONNXLibPath = "";
+
+            if (Target.Platform == UnrealTargetPlatform.Mac)
+            {
+                //ONNXLibPath = Path.Combine(ONNXRoot, "include", "lib", "Mac");
+                PublicIncludePaths.Add(Path.Combine(ONNXRoot, "include"));
+                // Add this only if you built protobuf headers for Mac too
+                // PublicIncludePaths.Add(Path.Combine(ONNXRoot, "build_mac", "_deps", "onnx-src", "onnx"));
+
+		//string FullPath = Path.Combine(ModuleDirectory, "Private", "IOSNNERunner.cpp");
+    		//ExcludedPrivateCompilePaths.Add(FullPath);
+            }
+            else if (Target.Platform == UnrealTargetPlatform.IOS)
+            {
+                ONNXLibPath = Path.Combine(ONNXRoot, "include", "lib", "iOS");
+                PublicIncludePaths.Add(Path.Combine(ONNXRoot, "include"));
+                PublicIncludePaths.Add(Path.Combine(ONNXRoot, "build_ios", "Release", "_deps", "onnx-src", "onnx"));
+            }
+
             
             
         	// Common OpenCV modules you depend on
@@ -55,54 +75,84 @@ public class IntelliSpace : ModuleRules
             		{
                 		"NNE", "NNERuntimeORT", "NNEUtilities"
             		});
+                    PublicIncludePaths.Add(Path.Combine(ONNXRoot, "include"));
         	}
 
         	if (Target.Platform == UnrealTargetPlatform.IOS)
         	{
+                    //PrivateExcludePaths.Add("Private/IOSNNERunner.cpp");
             		string OpenCVModulesPath = "/Volumes/ExtremSSD/tries/opencv";
             		string OpenCVLibPath = Path.Combine(OpenCVModulesPath, "build_ios");
 
+                    PublicDefinitions.Add("USE_DIRECT_ONNX=1");
             		PublicDefinitions.Add("ORT_NO_EXCEPTIONS");
-            		PublicDefinitions.Add("USE_DIRECT_ONNX=1");
+            		
 
             		// ONNX Headers
             		//PublicIncludePaths.Add(ONNXIncludePath);
             		//PublicIncludePaths.Add(Path.Combine(ONNXIncludePath, "onnxruntime", "core", "session"));
 
-            		// ONNX Libraries
-            		string[] ORTLibraries = new string[]
-            		{
-                		"libonnxruntime_common.a",
-                		"libonnxruntime_framework.a",
-                		"libonnxruntime_graph.a",
-                		"libonnxruntime_session.a",
-                		"libonnxruntime_optimizer.a",
-                		"libonnxruntime_flatbuffers.a",
-                		"libonnxruntime_util.a",
-                		"libonnxruntime_providers.a",
-                		"libonnxruntime_test_utils.a",
-                		"libonnxruntime_mocked_allocator.a",
-                		"libonnxruntime_mlas.a",
-                        "libonnx.a",
+            		// ONNX Librariesssssssssssssssss
+                    string[] ORTLibraries = new string[]
+                    {
                         "libonnx_proto.a",
-                        "libprotobuf-lite.a",
-                        "libnsync_cpp.a",
-                        "libre2.a",
-                        "libabsl_strings.a",
-                        "libabsl_base.a",
+                        "libabsl_city.a",
+                        "libabsl_time_zone.a",
+                        "libonnxruntime_session.a",
+                        "libabsl_spinlock_wait.a",
+                        "libabsl_cord.a",
+                        "libabsl_log_severity.a",
+                        "libabsl_bad_optional_access.a",
                         "libabsl_hash.a",
-                        "libabsl_raw_hash_set.a",
-                        "libabsl_throw_delegate.a",
-                        "libabsl_raw_hash_set.a",
+                        "libabsl_raw_logging_internal.a",
+                        "libonnxruntime_framework.a",
+                        "libabsl_cord_internal.a",
                         "libabsl_base.a",
-                        "libabsl_strings.a",
+                        "libabsl_cordz_info.a",
+                        "libonnxruntime_flatbuffers.a",
+                        "libonnxruntime_util.a",
                         "libabsl_throw_delegate.a",
-                        "libabsl_low_level_hash.a"
+                        "libabsl_debugging_internal.a",
+                        "libonnxruntime_common.a",
+                        "libonnxruntime_mlas.a",
+                        "libonnxruntime_test_utils.a",
+                        "libabsl_strings.a",
+                        "libonnxruntime_optimizer.a",
+                        "libabsl_malloc_internal.a",
+                        "libprotobuf-lite.a",
+                        "libabsl_strings_internal.a",
+                        "libabsl_int128.a",
+                        "libabsl_raw_hash_set.a",
+                        "libonnx.a",
+                        "libabsl_symbolize.a",
+                        "libabsl_graphcycles_internal.a",
+                        "libabsl_exponential_biased.a",
+                        "libonnxruntime_providers.a",
+                        "libabsl_bad_variant_access.a",
+                        "libnsync_cpp.a",
+                        "libabsl_stacktrace.a",
+                        "libabsl_cordz_handle.a",
+                        "libonnxruntime_graph.a",
+                        "libonnxruntime_combined.a",
+                        "libabsl_time.a",
+                        "libabsl_synchronization.a",
+                        "libabsl_hashtablez_sampler.a",
+                        "libabsl_demangle_internal.a",
+                        "libre2.a",
+                        "libabsl_cordz_functions.a",
+                        "libabsl_low_level_hash.a",
+                        "libonnxruntime_mocked_allocator.a",
+                        "libabsl_civil_time.a"
                     };
-            		foreach (string lib in ORTLibraries)
-            		{
-                		PublicAdditionalLibraries.Add(Path.Combine(ONNXLibPath, lib));
-            		}
+                    foreach (string lib in ORTLibraries)
+                    {
+                        PublicAdditionalLibraries.Add(Path.Combine(ONNXLibPath, lib));
+                    }
+              
+              
+              
+              
+              
             
             		PublicSystemLibraries.AddRange(new string[] { "z", "iconv", "bz2", "c++" });
 
@@ -115,7 +165,10 @@ public class IntelliSpace : ModuleRules
             		foreach (string module in OpenCVHeaderModules)
             		{
                 		PublicIncludePaths.Add(Path.Combine(OpenCVModulesPath, "modules", module, "include"));
-			}
+                    }
+                    PublicIncludePaths.Add(Path.Combine(ONNXRoot, "include"));
+                    //PublicIncludePaths.Add(Path.Combine(ONNXRoot, "build_ios", "Release", "_deps", "onnx-src", "onnx"));
+
             		PublicIncludePaths.Add(OpenCVLibPath);
 
             		// OpenCV Static Libraries
@@ -149,6 +202,12 @@ public class IntelliSpace : ModuleRules
                 		"Accelerate", "AVFoundation", "CoreMedia", "CoreVideo"
             		});
         	}
+         
+            
+            
+            
+            
+            
 
         	PublicDependencyModuleNames.AddRange(new string[]
         	{

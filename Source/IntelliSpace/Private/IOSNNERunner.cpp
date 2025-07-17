@@ -1,15 +1,34 @@
 #include "IOSNNERunner.h"
 
-#include "HAL/PlatformFilemanager.h"
-#include "Misc/Paths.h"
-
 #if PLATFORM_IOS
 
+
+//#include "HAL/PlatformFilemanager.h"
+//#include "Misc/Paths.h"
+
+
+
 #include <onnxruntime/core/session/onnxruntime_cxx_api.h>
+//#include <onnxruntime_cxx_api.h>
+//#include <onnx/onnx_pb.h>
+
+Ort::Env& GetOrtEnv()
+{
+    static Ort::Env* EnvInstance = nullptr;
+
+    if (!EnvInstance)
+    {
+        EnvInstance = new Ort::Env(ORT_LOGGING_LEVEL_WARNING, "UnrealORT");
+    }
+
+    return *EnvInstance;
+}
+
 
 bool UIOSNNERunner::InitializeModel(const FString& ModelPath)
 {
-    static Ort::Env OrtEnv(ORT_LOGGING_LEVEL_WARNING, "UnrealORT"); 
+//    static Ort::Env OrtEnv(ORT_LOGGING_LEVEL_WARNING, "UnrealORT");
+    Ort::Env& OrtEnv = GetOrtEnv();
     Ort::SessionOptions SessionOptions;
     FString AbsolutePath = FPaths::ConvertRelativePathToFull(ModelPath);
     Session = MakeUnique<Ort::Session>(OrtEnv, TCHAR_TO_UTF8(*AbsolutePath), SessionOptions);
