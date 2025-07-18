@@ -71,10 +71,16 @@ public class IntelliSpace : ModuleRules
                 		PublicAdditionalLibraries.Add(Path.Combine(OpenCVPath, "lib", $"libopencv_{module}.dylib"));
             		}
             
-            		PublicDependencyModuleNames.AddRange(new string[]
-            		{
-                		"NNE", "NNERuntimeORT", "NNEUtilities"
-            		});
+            		              
+                    PublicDependencyModuleNames.AddRange(new string[]
+                    {
+                            "NNE", "NNERuntimeORT", "NNEUtilities"
+                    });
+
+                    PrivateDependencyModuleNames.AddRange(new string[]
+                    {
+                            "NNE", "NNERuntimeORT"
+                    });
                     PublicIncludePaths.Add(Path.Combine(ONNXRoot, "include"));
         	}
 
@@ -149,10 +155,6 @@ public class IntelliSpace : ModuleRules
                         PublicAdditionalLibraries.Add(Path.Combine(ONNXLibPath, lib));
                     }
               
-              
-              
-              
-              
             
             		PublicSystemLibraries.AddRange(new string[] { "z", "iconv", "bz2", "c++" });
 
@@ -203,21 +205,15 @@ public class IntelliSpace : ModuleRules
             		});
         	}
          
-            
-            
-            
-            
-            
 
         	PublicDependencyModuleNames.AddRange(new string[]
-        	{
-            		"Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "NNE", "ImagePlate"
-        	});
+            {
+                    "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate"
+            });
 
-        	PrivateDependencyModuleNames.AddRange(new string[]
-        	{
-            		"Core", "CoreUObject", "Engine", "Renderer", "RenderCore", "RHI", "RHICore", "NNE"
-        	});
-
+            PrivateDependencyModuleNames.AddRange(new string[]
+            {
+                    "Core", "CoreUObject", "Engine", "Renderer", "RenderCore", "RHI", "RHICore"
+            });
 	}
 }

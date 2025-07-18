@@ -2,13 +2,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#if PLATFORM_MAC
 #include "NNETypes.h"
+#endif
 #include "PlatformNNERunner.h"
 //#include <onnxruntime/core/session/onnxruntime_cxx_api.h>
 #include "IOSNNERunner.generated.h"
 
 #if PLATFORM_IOS
-namespace Ort { class Session; }
+namespace Ort { struct Session; }
 #endif
 
 UCLASS()
@@ -19,7 +21,9 @@ class INTELLISPACE_API UIOSNNERunner : public UPlatformNNERunner
 public:
 //#if PLATFORM_IOS
     virtual bool InitializeModel(const FString& ModelPath) override;
-    virtual bool RunInference(const TArray<float>& InputTensor, int Width, int Height, TArray<float>& OutMaskTensor, TArray<TArray<float>>& OutputTensors, TArray<UE::NNE::FTensorBindingCPU>& OutputBindings) override;
+    virtual bool RunInference(const TArray<float>& InputTensor, int Width, int Height, TArray<float>& OutMaskTensor
+                              //TArray<TArray<float>>& OutputTensors, //TArray<UE::NNE::FTensorBindingCPU>& OutputBindings
+                              ) override;
 //#else
     // Stub fallback for Mac or other platforms
     //virtual bool InitializeModel(const FString&) override { return false; }
@@ -30,7 +34,8 @@ public:
 private:
 #if PLATFORM_IOS
     //class Ort::Session;
-    TUniquePtr<Ort::Session> Session;
+    Ort::Session* Session = nullptr;
+//    TUniquePtr<Ort::Session> Session;
     
 #endif
 };

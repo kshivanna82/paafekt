@@ -1,4 +1,7 @@
 #include "MacNNERunner.h"
+
+#if PLATFORM_MAC
+
 #include "NNEModelData.h"
 #include "HAL/PlatformFilemanager.h"
 #include "Misc/FileHelper.h"
@@ -6,6 +9,9 @@
 
 #include "NNERuntimeFormat.h"
 #include "NNERuntimeCPU.h"
+
+TArray<TArray<float>> OutputTensors;
+TArray<UE::NNE::FTensorBindingCPU> OutputBindings;
 
 
 bool UMacNNERunner::InitializeModel(const FString& ModelPath)
@@ -29,8 +35,10 @@ bool UMacNNERunner::InitializeModel(const FString& ModelPath)
     return true;
 }
 
-bool UMacNNERunner::RunInference(const TArray<float>& InputTensor, int Width, int Height, TArray<float>& OutMaskTensor, TArray<TArray<float>>& OutputTensors,
-                                 TArray<UE::NNE::FTensorBindingCPU>& OutputBindings)
+bool UMacNNERunner::RunInference(const TArray<float>& InputTensor, int Width, int Height, TArray<float>& OutMaskTensor
+                                 //TArray<TArray<float>>& OutputTensors,
+                                 //TArray<UE::NNE::FTensorBindingCPU>& OutputBindings
+                                 )
 {
     if (!CpuModelInstance.IsValid())
     {
@@ -73,3 +81,4 @@ bool UMacNNERunner::RunInference(const TArray<float>& InputTensor, int Width, in
 
     return true;
 }
+#endif

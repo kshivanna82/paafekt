@@ -2,7 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
+#if PLATFORM_MAC
+//kkkkkkk
 #include "NNERuntimeCPU.h"
+#endif
 #include "PlatformNNERunner.generated.h"
 
 UCLASS(Abstract)
@@ -17,8 +20,8 @@ public:
         const TArray<float>& InputTensor,
         int Width,
         int Height,
-        TArray<float>& OutMaskTensor,
-        TArray<TArray<float>>& OutputTensors,
-        TArray<UE::NNE::FTensorBindingCPU>& OutputBindings
+        TArray<float>& OutMaskTensor
+        //TArray<TArray<float>>& OutputTensors,
+        //TArray<UE::NNE::FTensorBindingCPU>& OutputBindings
     ) PURE_VIRTUAL(UPlatformNNERunner::RunInference, return false;);
 };

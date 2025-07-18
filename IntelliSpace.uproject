@@ -27,7 +27,8 @@
 		},
         {
           "Name": "NNERuntimeORT",
-          "Enabled": true
+          "Enabled": true,
+          "WhitelistPlatforms": [ "Mac" ]
         }
 
 	]

@@ -5,9 +5,9 @@
 
 //#include "HAL/PlatformFilemanager.h"
 //#include "Misc/Paths.h"
-
-
-
+//#include "NNE.h"
+//#include "NNERuntimeCPU.h"
+//#include "NNERuntime.h"
 #include <onnxruntime/core/session/onnxruntime_cxx_api.h>
 //#include <onnxruntime_cxx_api.h>
 //#include <onnx/onnx_pb.h>
@@ -31,12 +31,15 @@ bool UIOSNNERunner::InitializeModel(const FString& ModelPath)
     Ort::Env& OrtEnv = GetOrtEnv();
     Ort::SessionOptions SessionOptions;
     FString AbsolutePath = FPaths::ConvertRelativePathToFull(ModelPath);
-    Session = MakeUnique<Ort::Session>(OrtEnv, TCHAR_TO_UTF8(*AbsolutePath), SessionOptions);
+//    Session = MakeUnique<Ort::Session>(OrtEnv, TCHAR_TO_UTF8(*AbsolutePath), SessionOptions);
+    Session = new Ort::Session(OrtEnv, TCHAR_TO_UTF8(*AbsolutePath), SessionOptions);
     return true;
 }
 
-bool UIOSNNERunner::RunInference(const TArray<float>& InputTensor, int Width, int Height, TArray<float>& OutMaskTensor, TArray<TArray<float>>& OutputTensors,
-                                 TArray<UE::NNE::FTensorBindingCPU>& OutputBindings)
+bool UIOSNNERunner::RunInference(const TArray<float>& InputTensor, int Width, int Height, TArray<float>& OutMaskTensor
+                                 //TArray<TArray<float>>& OutputTensors,
+                                 //TArray<UE::NNE::FTensorBindingCPU>& OutputBindings
+                                 )
 {
     const int64 InputDims[] = {1, 3, Height, Width};
     Ort::MemoryInfo MemInfo = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
@@ -46,8 +49,8 @@ bool UIOSNNERunner::RunInference(const TArray<float>& InputTensor, int Width, in
     auto OutputNames = Session->GetOutputNameAllocated(0, Ort::AllocatorWithDefaultOptions());
     std::array<const char*, 1> OutputNamesArray = {OutputNames.get()};
 
-    auto OutputTensors = Session->Run(Ort::RunOptions{nullptr}, nullptr, &Input, 1, OutputNamesArray.data(), 1);
-    float* OutputData = OutputTensors[0].GetTensorMutableData<float>();
+    auto OrtOutputTensors = Session->Run(Ort::RunOptions{nullptr}, nullptr, &Input, 1, OutputNamesArray.data(), 1);
+    float* OutputData = OrtOutputTensors[0].GetTensorMutableData<float>();
 
     OutMaskTensor.SetNum(Width * Height);
     FMemory::Memcpy(OutMaskTensor.GetData(), OutputData, OutMaskTensor.Num() * sizeof(float));
@@ -64,9 +67,10 @@ bool UIOSNNERunner::InitializeModel(const FString&)
 }
 
 bool UIOSNNERunner::RunInference(const TArray<float>&, int, int,
-                                 TArray<float>&,
-                                 TArray<TArray<float>>&,
-                                 TArray<UE::NNE::FTensorBindingCPU>&)
+                                 TArray<float>&
+                                 //TArray<TArray<float>>&,
+                                 //TArray<UE::NNE::FTensorBindingCPU>&
+                                 )
 {
     // Dummy implementation
     return false;

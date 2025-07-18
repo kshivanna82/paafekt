@@ -10,7 +10,7 @@ public class IntelliSpaceTarget : TargetRules
 		Type = TargetType.Game;
 		DefaultBuildSettings = BuildSettingsVersion.V5;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_4;
-		//ExtraModuleNames.Add("IntelliSpace");
-        ExtraModuleNames.AddRange( new string[] { "IntelliSpace", "NNERuntimeORT" } );
+		ExtraModuleNames.Add("IntelliSpace");
+        //ExtraModuleNames.AddRange( new string[] { "IntelliSpace", "NNERuntimeORT" } );
 	}
 }
