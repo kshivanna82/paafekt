@@ -8,6 +8,8 @@ public class IntelliSpace : ModuleRules
 	public IntelliSpace(ReadOnlyTargetRules Target) : base(Target)
 	{
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+        bEnableExceptions = true;
+
 
         	string ProjectRoot = Path.Combine(ModuleDirectory, "../..");
          //string ProjectRoot = Path.GetFullPath(Path.Combine(ModuleDirectory, "../.."));

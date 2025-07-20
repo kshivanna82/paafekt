@@ -21,6 +21,7 @@
 #include "MediaTexture.h"
 #include "Runtime/Engine/Classes/Engine/Texture2D.h"
 #include "Runtime/Engine/Classes/Engine/TextureRenderTarget2D.h"
+#include <Runtime/Core/Public/Misc/FileHelper.h>
 
 #if PLATFORM_IOS
 #include <onnxruntime/core/session/onnxruntime_cxx_api.h>
@@ -81,18 +82,29 @@ public:
     
         
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-    USceneComponent* rootComp;
+        USceneComponent* rootComp;
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-    UImagePlateComponent* ImagePlateRaw;
+        UImagePlateComponent* ImagePlateRaw;
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-    UImagePlateComponent* ImagePlatePost;
+        UImagePlateComponent* ImagePlatePost;
     UPROPERTY(BlueprintReadWrite, VisibleAnyWhere, Category = Camera)
-    UTexture2D* Camera_Texture2D;
+        UTexture2D* Camera_Texture2D;
     UPROPERTY()
-    UTexture2D* VideoMask_Texture2D;
+        UTexture2D* VideoMask_Texture2D;
     UPROPERTY(BlueprintReadWrite, VisibleAnyWhere, Category = Camera)
-    TArray<FColor> ColorData;
-//private:
+        TArray<FColor> ColorData;
+    
+//    UFUNCTION(BlueprintCallable, Category = "ONNX")
+//        FString GetModelFilePath(FString Filename);
+    UFUNCTION(BlueprintCallable, Category = "File I/O")
+        static FString LoadFileToString(FString Filename);
+    UFUNCTION(BlueprintCallable, Category = "File I/O")
+        static TArray<uint8> LoadFileToStringArray(FString Filename);
+
+    // Blueprint-settable model path
+//    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "ONNX")
+//        FString ModelFilePath;
+
     cv::VideoCapture cap;
     cv::Mat frame;
     cv::Mat resized;

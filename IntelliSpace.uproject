@@ -31,5 +31,10 @@
           "WhitelistPlatforms": [ "Mac" ]
         }
 
-	]
+	],
+    "AdditionalNonAssetDirectories": [
+        "content/Models",
+        "Content/Models"
+    ]
+
 }
