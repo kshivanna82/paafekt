@@ -1,5 +1,6 @@
-#include "FurniLife.h"
+// FurniLife.cpp - Debug-Safe PNG Save (iOS-Protected)
 
+#include "FurniLife.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFilemanager.h"
 #include "Engine/Texture2D.h"
@@ -10,24 +11,39 @@
 #include "ImagePlateComponent.h"
 #include <Foundation/Foundation.h>
 #include <fstream>
+#include <mutex>
+#include <opencv2/imgcodecs.hpp>
 
-//#if PLATFORM_IOS
-//#include <onnxruntime/core/session/onnxruntime_cxx_api.h>
-//#endif
-
-//#include "opencv2/opencv.hpp"
-//#include <onnxruntime_cxx_api.h>
-
-//namespace Ort { struct Session; }
 std::vector<std::string> InputNameStrs;
 std::vector<std::string> OutputNameStrs;
 TArray<const char*> InputNames;
 TArray<const char*> OutputNames;
 
+#define SAFE_IMWRITE(Path, Image)                          \
+    {                                                      \
+        FString P = Path;                                  \
+        if (!Image.empty())                                \
+        {                                                  \
+            if (!PLATFORM_IOS)                             \
+                cv::imwrite(TCHAR_TO_UTF8(*P), Image);     \
+            else                                           \
+                UE_LOG(LogTemp, Warning, TEXT("[iOS] Skipped cv::imwrite: %s"), *P); \
+        }                                                  \
+    }
+
+static void UpdateTextureRegions(
+    UTexture2D* Texture,
+    int32 MipIndex,
+    uint32 NumRegions,
+    FUpdateTextureRegion2D* Regions,
+    uint32 SrcPitch,
+    uint32 SrcBpp,
+    uint8* SrcData,
+    bool bFreeData = false
+);
 
 AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
-    UE_LOG(LogTemp, Warning, TEXT("FurniLife Constructor"));
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.bStartWithTickEnabled = true;
     rootComp = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
@@ -42,46 +58,40 @@ AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(Obje
     RefreshRate = 30.0f;
 }
 
-static void UpdateTextureRegions(
-    UTexture2D* Texture,
-    int32 MipIndex,
-    uint32 NumRegions,
-    FUpdateTextureRegion2D* Regions,
-    uint32 SrcPitch,
-    uint32 SrcBpp,
-    uint8* SrcData,
-    bool bFreeData = false
-);
-
 void AFurniLife::BeginPlay()
 {
     Super::BeginPlay();
+#if PLATFORM_IOS
+    OutputDir = FPaths::ProjectSavedDir() + TEXT("Frames/");
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    if (!PlatformFile.DirectoryExists(*OutputDir))
+    {
+        PlatformFile.CreateDirectory(*OutputDir);
+    }
+#endif
     cap.open(CameraID);
     if (!cap.isOpened()) {
         UE_LOG(LogTemp, Error, TEXT("Failed to open camera"));
         return;
     }
     isStreamOpen = true;
+
     ColorData.SetNumUninitialized(VideoSize.X * VideoSize.Y);
     cvSize = cv::Size(VideoSize.X, VideoSize.Y);
     cvMat = cv::Mat(cvSize, CV_8UC4, ColorData.GetData());
+
     Camera_Texture2D = UTexture2D::CreateTransient(VideoSize.X, VideoSize.Y, PF_B8G8R8A8);
     VideoMask_Texture2D = UTexture2D::CreateTransient(VideoSize.X, VideoSize.Y, PF_G8);
 #if WITH_EDITORONLY_DATA
     Camera_Texture2D->MipGenSettings = TMGS_NoMipmaps;
 #endif
-    Camera_Texture2D->SRGB = Camera_RenderTarget->SRGB;
+    Camera_Texture2D->SRGB = true;
     VideoMask_Texture2D->SRGB = false;
     Camera_Texture2D->UpdateResource();
-#if PLATFORM_IOS
-    
- 
-    
-    TArray<uint8> FileData;
 
-    #if PLATFORM_IOS
+#if PLATFORM_IOS
     FString OnnxPath = FString([[NSBundle mainBundle] pathForResource:@"U2NET1" ofType:@"onnx"]);
-        UE_LOG(LogTemp, Warning, TEXT("Loading model from: %s"), *OnnxPath);
+    TArray<uint8> FileData;
     std::ifstream file(TCHAR_TO_UTF8(*OnnxPath), std::ios::binary | std::ios::ate);
     if (file)
     {
@@ -90,24 +100,13 @@ void AFurniLife::BeginPlay()
         file.seekg(0, std::ios::beg);
         file.read(reinterpret_cast<char*>(FileData.GetData()), size);
         file.close();
-
-        UE_LOG(LogTemp, Display, TEXT("✅ Successfully read model: %s (%d bytes)"), *OnnxPath, FileData.Num());
     }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ std::ifstream failed to read: %s"), *OnnxPath);
-    }
-    #else
-    FFileHelper::LoadFileToArray(FileData, *OnnxPath);
-    #endif
 
     Ort::SessionOptions SessionOptions;
     SessionOptions.SetIntraOpNumThreads(1);
     SessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
-
     OrtSession = new Ort::Session(OrtEnv, FileData.GetData(), FileData.Num(), SessionOptions);
 
-    Ort::AllocatorWithDefaultOptions allocator;
     OrtAllocator* RawAllocator = nullptr;
     Ort::ThrowOnError(OrtGetApiBase()->GetApi(ORT_API_VERSION)->GetAllocatorWithDefaultOptions(&RawAllocator));
 
@@ -115,23 +114,13 @@ void AFurniLife::BeginPlay()
     Ort::ThrowOnError(OrtGetApiBase()->GetApi(ORT_API_VERSION)->SessionGetInputName(*OrtSession, 0, RawAllocator, &inputName));
     InputNameStrs.emplace_back(inputName);
     InputNames.push_back(InputNameStrs.back().c_str());
-    Ort::GetApi().AllocatorFree(RawAllocator, inputName);  // ✅ free inputName
+    Ort::GetApi().AllocatorFree(RawAllocator, inputName);
 
     char* outputName = nullptr;
     Ort::ThrowOnError(OrtGetApiBase()->GetApi(ORT_API_VERSION)->SessionGetOutputName(*OrtSession, 0, RawAllocator, &outputName));
     OutputNameStrs.emplace_back(outputName);
     OutputNames.push_back(OutputNameStrs.back().c_str());
-    Ort::GetApi().AllocatorFree(RawAllocator, outputName);  // ✅ free outputName
-
-
-    // Log
-    FString InNameStr = UTF8_TO_TCHAR(inputName);
-    FString OutNameStr = UTF8_TO_TCHAR(outputName);
-    UE_LOG(LogTemp, Display, TEXT("🧠 Input name: %s"), *InNameStr);
-    UE_LOG(LogTemp, Display, TEXT("🧠 Output name: %s"), *OutNameStr);
-
-
-
+    Ort::GetApi().AllocatorFree(RawAllocator, outputName);
 #endif
 }
 
@@ -150,42 +139,25 @@ void AFurniLife::Tick(float DeltaTime)
     }
 }
 
-FString AFurniLife::LoadFileToString(FString Filename) {
-    FString directory = FPaths::ProjectContentDir();
-    FString result;
-    FString myFile;
-    IPlatformFile& file = FPlatformFileManager::Get().GetPlatformFile();
-    if(file.CreateDirectory(*directory)) {
-        FString myFile = directory + "/" + Filename;
-        FFileHelper::LoadFileToString(result, *myFile);
-    }
-    return myFile;
-}
-
-TArray<uint8> AFurniLife::LoadFileToStringArray(FString Filename) {
-    FString directory = FPaths::ProjectContentDir();
-    TArray<uint8> result;
-    
-    IPlatformFile& file = FPlatformFileManager::Get().GetPlatformFile();
-    
-    if(file.CreateDirectory(*directory)) {
-        FString myFile = directory + "/" + Filename;
-        FFileHelper::LoadFileToArray(result, *myFile);
-    }
-    return result;
-}
-
 bool AFurniLife::ReadFrame()
 {
     if (!cap.isOpened()) return false;
+
     cap.read(frame);
-    if (frame.empty()) return false;
-    cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
-    
+    if (frame.empty())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Captured frame is empty — skipping write."));
+        return false;
+    }
+#if PLATFORM_IOS
+    FString RawPath = OutputDir / TEXT("LastRawFrame.png");
+    SAFE_IMWRITE(RawPath, frame);
+#endif
+    cv::flip(frame, frame, 0);
     ProcessInputForModel();
     RunModelInference();
     ApplySegmentationMask();
-    
+
     for (int y = 0; y < frame.rows; ++y)
     {
         for (int x = 0; x < frame.cols; ++x)
@@ -194,6 +166,7 @@ bool AFurniLife::ReadFrame()
             ColorData[y * frame.cols + x] = FColor(pixel[2], pixel[1], pixel[0], pixel[3]);
         }
     }
+
     static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
     UpdateTextureRegions(Camera_Texture2D, 0, 1, &Region, VideoSize.X * sizeof(FColor), sizeof(FColor), (uint8*)ColorData.GetData(), false);
     return true;
@@ -204,10 +177,18 @@ void AFurniLife::ProcessInputForModel()
     cv::resize(frame, resized, cv::Size(320, 320));
     cv::cvtColor(resized, resized, cv::COLOR_BGR2RGB);
     resized.convertTo(resized, CV_32FC3, 1.0 / 255.0);
+
+    cv::Mat displayResized;
+    resized.convertTo(displayResized, CV_8UC3, 255.0);
+#if PLATFORM_IOS
+    FString ResizedPath = OutputDir / TEXT("LastResizedInput.png");
+    SAFE_IMWRITE(ResizedPath, displayResized);
+#endif
 }
 
 void AFurniLife::RunModelInference()
 {
+#if PLATFORM_IOS
     const int Width = 320, Height = 320;
     std::vector<float> InputTensor(1 * 3 * Height * Width);
     int idx = 0;
@@ -215,118 +196,57 @@ void AFurniLife::RunModelInference()
         for (int y = 0; y < Height; ++y)
             for (int x = 0; x < Width; ++x)
                 InputTensor[idx++] = resized.at<cv::Vec3f>(y, x)[c];
-    
-#if PLATFORM_IOS
+
     Ort::MemoryInfo MemInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
     std::vector<int64_t> InputShape = {1, 3, Height, Width};
     Ort::Value InputTensorVal = Ort::Value::CreateTensor<float>(MemInfo, InputTensor.data(), InputTensor.size(), InputShape.data(), InputShape.size());
-    if (!OrtSession)
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ OrtSession is null. Model may not have been loaded correctly."));
-        return;
-    }
 
-    
-    try
-    {
-        if (InputNames.empty() || OutputNames.empty())
-        {
-            UE_LOG(LogTemp, Error, TEXT("❌ Input or Output names are missing!"));
-            return;
-        }
+    auto OutputTensors = OrtSession->Run(
+        Ort::RunOptions{nullptr},
+        InputNames.data(), &InputTensorVal, 1,
+        OutputNames.data(), 1);
 
-        auto OutputTensors = OrtSession->Run(
-            Ort::RunOptions{nullptr},
-            InputNames.data(), &InputTensorVal, 1,
-            OutputNames.data(), 1
-        );
-
-        float* OutData = OutputTensors[0].GetTensorMutableData<float>();
-        OutputBuffer.assign(OutData, OutData + Height * Width);
-
-        UE_LOG(LogTemp, Display, TEXT("✅ Inference completed. Output size: %d"), static_cast<int32>(OutputBuffer.size()));
-    }
-    catch (const Ort::Exception& e)
-    {
-        FString ErrorMessage = FString(UTF8_TO_TCHAR(e.what()));
-        UE_LOG(LogTemp, Error, TEXT("❌ ONNX Runtime exception: %s"), *ErrorMessage);
-        UE_LOG(LogTemp, Error, TEXT("❌ ONNX Runtime exception: %s"), *ErrorMessage);
-    }
-
-
-
+    float* OutData = OutputTensors[0].GetTensorMutableData<float>();
+    OutputBuffer.assign(OutData, OutData + Height * Width);
 #endif
-    
 }
-
-//FString AFurniLife::GetModelFilePath(FString Filename)
-//{
-//    FString Directory = FPaths::ProjectContentDir();
-//    FString FullPath = Directory / Filename;
-//
-//    if (FPaths::FileExists(FullPath))
-//    {
-//        UE_LOG(LogTemp, Log, TEXT("Resolved model path: %s"), *FullPath);
-//        return FullPath;
-//    }
-//    else
-//    {
-//        UE_LOG(LogTemp, Error, TEXT("File does not exist: %s"), *FullPath);
-//        return FString(); // empty
-//    }
-//}
-
-//void AFurniLife::ApplySegmentationMask()
-//{
-//    const int Width = 320, Height = 320;
-//    cv::Mat mask(Height, Width, CV_32FC1, OutputBuffer.data());
-//    mask.convertTo(alphaMask, CV_8UC1, 255.0);
-//    cv::resize(alphaMask, alphaMask, cv::Size(VideoSize.X, VideoSize.Y));
-//    if (frame.channels() == 3)
-//        cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
-//    for (int y = 0; y < frame.rows; ++y)
-//    {
-//        for (int x = 0; x < frame.cols; ++x)
-//        {
-//            uchar alpha = alphaMask.at<uchar>(y, x);
-//            frame.at<cv::Vec4b>(y, x)[3] = alpha < 64 ? 0 : alpha;
-//        }
-//    }
-//}
 
 void AFurniLife::ApplySegmentationMask()
 {
     const int Width = 320, Height = 320;
-
-    // Wrap model output as CV_32FC1
     cv::Mat mask(Height, Width, CV_32FC1, OutputBuffer.data());
-
-    // Convert to 0-255 range
     mask.convertTo(alphaMask, CV_8UC1, 255.0);
-
-    // 🔍 DEBUG: Check the range of values in alphaMask
-    double minVal = 0, maxVal = 0;
-    cv::minMaxLoc(alphaMask, &minVal, &maxVal);
-    UE_LOG(LogTemp, Warning, TEXT("Alpha mask range: min = %.1f, max = %.1f"), minVal, maxVal);
-
-    // Resize to full video size
     cv::resize(alphaMask, alphaMask, cv::Size(VideoSize.X, VideoSize.Y));
-
-    // Ensure 4 channels
+#if PLATFORM_IOS
+    FString AlphaPath = OutputDir / TEXT("LastAlphaMask.png");
+    SAFE_IMWRITE(AlphaPath, alphaMask);
+#endif
     if (frame.channels() == 3)
         cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
 
-    // Apply mask
     for (int y = 0; y < frame.rows; ++y)
     {
         for (int x = 0; x < frame.cols; ++x)
         {
             uchar alpha = alphaMask.at<uchar>(y, x);
-            frame.at<cv::Vec4b>(y, x)[3] = alpha < 64 ? 0 : alpha;
+            frame.at<cv::Vec4b>(y, x)[3] = (alpha < 64) ? 0 : 255;
         }
     }
+#if PLATFORM_IOS
+    FString FinalPath = OutputDir / TEXT("LastFinalComposited.png");
+    SAFE_IMWRITE(FinalPath, frame);
+#endif
+    double minVal, maxVal;
+    cv::minMaxLoc(alphaMask, &minVal, &maxVal);
+    UE_LOG(LogTemp, Warning, TEXT("Alpha mask range: min = %f, max = %f"), minVal, maxVal);
 }
 
+FString AFurniLife::LoadFileToString(FString FilePath)
+{
+    FString Result;
+    FFileHelper::LoadFileToString(Result, *FilePath);
+    return Result;
+}
 
 static void UpdateTextureRegions(UTexture2D* Texture, int32 MipIndex, uint32 NumRegions, FUpdateTextureRegion2D* Regions,
                                  uint32 SrcPitch, uint32 SrcBpp, uint8* SrcData, bool bFreeData)
@@ -354,4 +274,3 @@ static void UpdateTextureRegions(UTexture2D* Texture, int32 MipIndex, uint32 Num
             });
     }
 }
-

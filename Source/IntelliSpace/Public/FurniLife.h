@@ -98,8 +98,8 @@ public:
 //        FString GetModelFilePath(FString Filename);
     UFUNCTION(BlueprintCallable, Category = "File I/O")
         static FString LoadFileToString(FString Filename);
-    UFUNCTION(BlueprintCallable, Category = "File I/O")
-        static TArray<uint8> LoadFileToStringArray(FString Filename);
+//    UFUNCTION(BlueprintCallable, Category = "File I/O")
+//        static TArray<uint8> LoadFileToStringArray(FString Filename);
 
     // Blueprint-settable model path
 //    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "ONNX")
@@ -131,6 +131,8 @@ public:
     Ort::SessionOptions SessionOptions;
     Ort::Session* OrtSession = nullptr;
 
+    //int32 FrameCounter;
+    FString OutputDir;
 
 #endif
     

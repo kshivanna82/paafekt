@@ -5,3 +5,14 @@ Binaries/
 Content/
 Build/
 ThirdParty/
+*.onnx
+IOS/
+*.xcsettings
+*.png
+*.bat
+*.sh
+*.sln
+*.DS_Store
+*.pdf
+*.xcworkspacedata
+*.xcuserstate
