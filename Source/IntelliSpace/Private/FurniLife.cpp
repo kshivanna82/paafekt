@@ -124,6 +124,25 @@ void AFurniLife::BeginPlay()
     OutputNames.push_back(OutputNameStrs.back().c_str());
     Ort::GetApi().AllocatorFree(RawAllocator, outputName);
 #endif
+#if PLATFORM_MAC
+    FString ModelPath = FPaths::ProjectConfigDir() / TEXT("Models/U2NET1.onnx");
+    TArray<uint8> RawData;
+    if (!FFileHelper::LoadFileToArray(RawData, *ModelPath))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to load ONNX model from %s"), *ModelPath);
+        return false;
+    }
+
+    UNNEModelData* ModelData = NewObject<UNNEModelData>();
+    ModelData->Init(TEXT("onnx"), RawData);
+
+    CpuRuntime = UE::NNE::GetRuntime<INNERuntimeCPU>(TEXT("NNERuntimeORTCpu"));
+    if (CpuRuntime.IsValid() && CpuRuntime->CanCreateModelCPU(ModelData) == INNERuntimeCPU::ECanCreateModelCPUStatus::Ok)
+    {
+        CpuModel = CpuRuntime->CreateModelCPU(ModelData);
+        CpuModelInstance = CpuModel->CreateModelInstanceCPU();
+    }
+#endif
 }
 
 void AFurniLife::Tick(float DeltaTime)
@@ -205,12 +224,59 @@ void AFurniLife::RunModelInference()
     float* OutData = OutputTensors[0].GetTensorMutableData<float>();
     OutputBuffer.assign(OutData, OutData + Height * Width);
 #endif
+#if PLATFORM_MAC
+    const int Width = 320;
+       const int Height = 320;
+       if (!CpuModelInstance)
+       {
+           UE_LOG(LogTemp, Error, TEXT("[Inference] CpuModelInstance is null."));
+           return;
+       }
+       TArray<float> InputTensor;
+       InputTensor.SetNum(1 * 3 * Width * Height);
+       int idx = 0;
+       for (int c = 0; c < 3; ++c)
+           for (int y = 0; y < Height; ++y)
+               for (int x = 0; x < Width; ++x)
+                   InputTensor[idx++] = resized.at<cv::Vec3f>(y, x)[c];
+       TArray<uint32> InputDims = {1, 3, Height, Width};
+       UE::NNE::FTensorShape InputShape = UE::NNE::FTensorShape::Make(InputDims);
+       CpuModelInstance->SetInputTensorShapes({InputShape});
+       UE::NNE::FTensorBindingCPU InputBinding;
+       InputBinding.Data = InputTensor.GetData();
+       InputBinding.SizeInBytes = InputTensor.Num() * sizeof(float);
+       OutputTensors.Empty();
+       OutputBindings.Empty();
+       for (int i = 0; i < 7; ++i)
+       {
+           TArray<float> OutputTensor;
+           OutputTensor.SetNum(Height * Width);  // One channel
+           UE::NNE::FTensorBindingCPU Binding;
+           Binding.Data = OutputTensor.GetData();
+           Binding.SizeInBytes = OutputTensor.Num() * sizeof(float);
+           OutputTensors.Add(MoveTemp(OutputTensor));
+           OutputBindings.Add(Binding);
+       }
+       auto Status = CpuModelInstance->RunSync({InputBinding}, OutputBindings);
+       if (Status != UE::NNE::EResultStatus::Ok) {
+           UE_LOG(LogTemp, Error, TEXT("Inference failed."));
+       }
+       else {
+           UE_LOG(LogTemp, Log, TEXT("Inference succeeded."));
+       }
+
+#endif
 }
 
 void AFurniLife::ApplySegmentationMask()
 {
     const int Width = 320, Height = 320;
+#if PLATFORM_MAC
+    cv::Mat mask(Height, Width, CV_32FC1, OutputBuffer.GetData());
+#endif
+#if PLATFORM_IOS
     cv::Mat mask(Height, Width, CV_32FC1, OutputBuffer.data());
+#endif
     mask.convertTo(alphaMask, CV_8UC1, 255.0);
     cv::resize(alphaMask, alphaMask, cv::Size(VideoSize.X, VideoSize.Y));
 
@@ -233,12 +299,7 @@ void AFurniLife::ApplySegmentationMask()
 //    UE_LOG(LogTemp, Warning, TEXT("Alpha mask range: min = %f, max = %f"), minVal, maxVal);
 }
 
-FString AFurniLife::LoadFileToString(FString FilePath)
-{
-    FString Result;
-    FFileHelper::LoadFileToString(Result, *FilePath);
-    return Result;
-}
+
 
 static void UpdateTextureRegions(UTexture2D* Texture, int32 MipIndex, uint32 NumRegions, FUpdateTextureRegion2D* Regions,
                                  uint32 SrcPitch, uint32 SrcBpp, uint8* SrcData, bool bFreeData)

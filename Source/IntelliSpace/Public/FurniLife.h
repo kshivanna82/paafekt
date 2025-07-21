@@ -23,6 +23,11 @@
 #include "Runtime/Engine/Classes/Engine/TextureRenderTarget2D.h"
 #include <Runtime/Core/Public/Misc/FileHelper.h>
 
+#if PLATFORM_MAC
+#include "NNE.h"
+#include "NNERuntime.h"
+#include "NNERuntimeCPU.h"
+#endif
 #if PLATFORM_IOS
 #include <onnxruntime/core/session/onnxruntime_cxx_api.h>
 #endif
@@ -94,16 +99,8 @@ public:
     UPROPERTY(BlueprintReadWrite, VisibleAnyWhere, Category = Camera)
         TArray<FColor> ColorData;
     
-//    UFUNCTION(BlueprintCallable, Category = "ONNX")
-//        FString GetModelFilePath(FString Filename);
-    UFUNCTION(BlueprintCallable, Category = "File I/O")
-        static FString LoadFileToString(FString Filename);
-//    UFUNCTION(BlueprintCallable, Category = "File I/O")
-//        static TArray<uint8> LoadFileToStringArray(FString Filename);
 
-    // Blueprint-settable model path
-//    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "ONNX")
-//        FString ModelFilePath;
+
 
     cv::VideoCapture cap;
     cv::Mat frame;
@@ -116,16 +113,17 @@ public:
     void RunModelInference();
     void ApplySegmentationMask();
     
-#if PLATFORM_IOS
-//    Ort::Env OrtEnv{ORT_LOGGING_LEVEL_WARNING, "FurniLife"};
-//    Ort::SessionOptions SessionOptions;
-//    Ort::Session* OrtSession = nullptr;
-//    Ort::Session* Session = nullptr;
+#if PLATFORM_MAC
+    TWeakInterfacePtr<INNERuntimeCPU> CpuRuntime;
+    TSharedPtr<UE::NNE::IModelCPU> CpuModel;
+    TSharedPtr<UE::NNE::IModelInstanceCPU> CpuModelInstance;
     
-//    Ort::SessionOptions SessionOptions;
-//    Ort::Session* OrtSession = nullptr;
-//    Ort::Env OrtEnv{ORT_LOGGING_LEVEL_WARNING, "FurniLife"};
-//    
+    TArray<TArray<float>> OutputTensors;
+    TArray<float> OutputBuffer;
+
+    TArray<UE::NNE::FTensorBindingCPU> OutputBindings;
+#endif
+#if PLATFORM_IOS
 
     Ort::Env OrtEnv{ORT_LOGGING_LEVEL_WARNING, "FurniLife"};
     Ort::SessionOptions SessionOptions;
@@ -133,10 +131,12 @@ public:
 
     //int32 FrameCounter;
     FString OutputDir;
-
-#endif
     
     std::vector<const char*> InputNames;
     std::vector<const char*> OutputNames;
     std::vector<float> OutputBuffer;
+
+#endif
+    
+    
 };
