@@ -31,16 +31,7 @@ TArray<const char*> OutputNames;
         }                                                  \
     }
 
-static void UpdateTextureRegions(
-    UTexture2D* Texture,
-    int32 MipIndex,
-    uint32 NumRegions,
-    FUpdateTextureRegion2D* Regions,
-    uint32 SrcPitch,
-    uint32 SrcBpp,
-    uint8* SrcData,
-    bool bFreeData = false
-);
+
 
 AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -57,6 +48,17 @@ AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(Obje
     VideoSize = FVector2D(1920, 1080);
     RefreshRate = 30.0f;
 }
+
+static void UpdateTextureRegions(
+    UTexture2D* Texture,
+    int32 MipIndex,
+    uint32 NumRegions,
+    FUpdateTextureRegion2D* Regions,
+    uint32 SrcPitch,
+    uint32 SrcBpp,
+    uint8* SrcData,
+    bool bFreeData = false
+);
 
 void AFurniLife::BeginPlay()
 {
@@ -85,7 +87,7 @@ void AFurniLife::BeginPlay()
 #if WITH_EDITORONLY_DATA
     Camera_Texture2D->MipGenSettings = TMGS_NoMipmaps;
 #endif
-    Camera_Texture2D->SRGB = true;
+    Camera_Texture2D->SRGB = Camera_RenderTarget->SRGB;
     VideoMask_Texture2D->SRGB = false;
     Camera_Texture2D->UpdateResource();
 
@@ -149,15 +151,15 @@ bool AFurniLife::ReadFrame()
         UE_LOG(LogTemp, Error, TEXT("Captured frame is empty — skipping write."));
         return false;
     }
-#if PLATFORM_IOS
-    FString RawPath = OutputDir / TEXT("LastRawFrame.png");
-    SAFE_IMWRITE(RawPath, frame);
-#endif
-    cv::flip(frame, frame, 0);
+
+//    cv::Mat bgrFlipped;
+//    cv::flip(frame, bgrFlipped, 0);
     ProcessInputForModel();
     RunModelInference();
     ApplySegmentationMask();
 
+    cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
+    
     for (int y = 0; y < frame.rows; ++y)
     {
         for (int x = 0; x < frame.cols; ++x)
@@ -168,7 +170,7 @@ bool AFurniLife::ReadFrame()
     }
 
     static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
-    UpdateTextureRegions(Camera_Texture2D, 0, 1, &Region, VideoSize.X * sizeof(FColor), sizeof(FColor), (uint8*)ColorData.GetData(), false);
+    UpdateTextureRegions(Camera_Texture2D, 0, 1, &Region, VideoSize.X * sizeof(FColor), sizeof(FColor), reinterpret_cast<uint8*>(ColorData.GetData()), false);
     return true;
 }
 
@@ -178,12 +180,6 @@ void AFurniLife::ProcessInputForModel()
     cv::cvtColor(resized, resized, cv::COLOR_BGR2RGB);
     resized.convertTo(resized, CV_32FC3, 1.0 / 255.0);
 
-    cv::Mat displayResized;
-    resized.convertTo(displayResized, CV_8UC3, 255.0);
-#if PLATFORM_IOS
-    FString ResizedPath = OutputDir / TEXT("LastResizedInput.png");
-    SAFE_IMWRITE(ResizedPath, displayResized);
-#endif
 }
 
 void AFurniLife::RunModelInference()
@@ -217,10 +213,7 @@ void AFurniLife::ApplySegmentationMask()
     cv::Mat mask(Height, Width, CV_32FC1, OutputBuffer.data());
     mask.convertTo(alphaMask, CV_8UC1, 255.0);
     cv::resize(alphaMask, alphaMask, cv::Size(VideoSize.X, VideoSize.Y));
-#if PLATFORM_IOS
-    FString AlphaPath = OutputDir / TEXT("LastAlphaMask.png");
-    SAFE_IMWRITE(AlphaPath, alphaMask);
-#endif
+
     if (frame.channels() == 3)
         cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
 
@@ -229,16 +222,15 @@ void AFurniLife::ApplySegmentationMask()
         for (int x = 0; x < frame.cols; ++x)
         {
             uchar alpha = alphaMask.at<uchar>(y, x);
-            frame.at<cv::Vec4b>(y, x)[3] = (alpha < 64) ? 0 : 255;
+//            frame.at<cv::Vec4b>(y, x)[3] = (alpha < 64) ? 0 : 255;
+            cv::Vec4b& px = frame.at<cv::Vec4b>(y, x);
+            px[3] = (alpha < 64) ? 0 : alpha;
         }
     }
-#if PLATFORM_IOS
-    FString FinalPath = OutputDir / TEXT("LastFinalComposited.png");
-    SAFE_IMWRITE(FinalPath, frame);
-#endif
-    double minVal, maxVal;
-    cv::minMaxLoc(alphaMask, &minVal, &maxVal);
-    UE_LOG(LogTemp, Warning, TEXT("Alpha mask range: min = %f, max = %f"), minVal, maxVal);
+
+//    double minVal, maxVal;
+//    cv::minMaxLoc(alphaMask, &minVal, &maxVal);
+//    UE_LOG(LogTemp, Warning, TEXT("Alpha mask range: min = %f, max = %f"), minVal, maxVal);
 }
 
 FString AFurniLife::LoadFileToString(FString FilePath)
