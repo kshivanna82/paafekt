@@ -161,17 +161,18 @@ bool AFurniLife::ReadFrame()
     cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
 
     
-    cv::Mat flipped;
-    cv::flip(frame, flipped, 0); // Flip vertically for Unreal
+//    cv::Mat flipped;
+//    cv::flip(frame, flipped, 0); // Flip vertically for Unreal
     int Width = VideoSize.X;
     int Height = VideoSize.Y;
     for (int y = 0; y < Height; ++y)
     {
         for (int x = 0; x < Width; ++x)
         {
-            cv::Vec4b& srcPixel = flipped.at<cv::Vec4b>(y, x);
+//            cv::Vec4b& srcPixel = frame.at<cv::Vec4b>(y, x);
+            cv::Vec4b& srcPixel = frame.at<cv::Vec4b>(y, x);
             int index = y * Width + x;
-            ColorData[index] = FColor(srcPixel[0], srcPixel[1], srcPixel[2], srcPixel[3]);
+            ColorData[index] = FColor(srcPixel[2], srcPixel[1], srcPixel[0], srcPixel[3]);
         }
     }
 
