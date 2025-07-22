@@ -1,35 +1,17 @@
-// FurniLife.cpp - Debug-Safe PNG Save (iOS-Protected)
-
 #include "FurniLife.h"
 #include "Misc/Paths.h"
-#include "HAL/PlatformFilemanager.h"
+//#include "HAL/PlatformFilemanager.h"
 #include "Engine/Texture2D.h"
 #include "RenderUtils.h"
 #include "RHICommandList.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Rendering/Texture2DResource.h"
 #include "ImagePlateComponent.h"
+#if PLATFORM_IOS
 #include <Foundation/Foundation.h>
 #include <fstream>
 #include <mutex>
-#include <opencv2/imgcodecs.hpp>
-
-std::vector<std::string> InputNameStrs;
-std::vector<std::string> OutputNameStrs;
-TArray<const char*> InputNames;
-TArray<const char*> OutputNames;
-
-#define SAFE_IMWRITE(Path, Image)                          \
-    {                                                      \
-        FString P = Path;                                  \
-        if (!Image.empty())                                \
-        {                                                  \
-            if (!PLATFORM_IOS)                             \
-                cv::imwrite(TCHAR_TO_UTF8(*P), Image);     \
-            else                                           \
-                UE_LOG(LogTemp, Warning, TEXT("[iOS] Skipped cv::imwrite: %s"), *P); \
-        }                                                  \
-    }
+#endif
 
 
 
@@ -62,15 +44,14 @@ static void UpdateTextureRegions(
 
 void AFurniLife::BeginPlay()
 {
+    
+    UE_LOG(LogTemp, Warning, TEXT("FurniLife::BeginPlay (before Super) this=%p"), this);
+    UE_LOG(LogTemp, Warning, TEXT("rootComp=%p, ImagePlateRaw=%p, ImagePlatePost=%p"), rootComp, ImagePlateRaw, ImagePlatePost);
+
     Super::BeginPlay();
-#if PLATFORM_IOS
-    OutputDir = FPaths::ProjectSavedDir() + TEXT("Frames/");
-    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-    if (!PlatformFile.DirectoryExists(*OutputDir))
-    {
-        PlatformFile.CreateDirectory(*OutputDir);
-    }
-#endif
+    UE_LOG(LogTemp, Warning, TEXT("Returned from Super::BeginPlay()"));
+
+
     cap.open(CameraID);
     if (!cap.isOpened()) {
         UE_LOG(LogTemp, Error, TEXT("Failed to open camera"));
@@ -115,13 +96,13 @@ void AFurniLife::BeginPlay()
     char* inputName = nullptr;
     Ort::ThrowOnError(OrtGetApiBase()->GetApi(ORT_API_VERSION)->SessionGetInputName(*OrtSession, 0, RawAllocator, &inputName));
     InputNameStrs.emplace_back(inputName);
-    InputNames.push_back(InputNameStrs.back().c_str());
+    InputNames.Add(InputNameStrs.back().c_str());
     Ort::GetApi().AllocatorFree(RawAllocator, inputName);
 
     char* outputName = nullptr;
     Ort::ThrowOnError(OrtGetApiBase()->GetApi(ORT_API_VERSION)->SessionGetOutputName(*OrtSession, 0, RawAllocator, &outputName));
     OutputNameStrs.emplace_back(outputName);
-    OutputNames.push_back(OutputNameStrs.back().c_str());
+    OutputNames.Add(OutputNameStrs.back().c_str());
     Ort::GetApi().AllocatorFree(RawAllocator, outputName);
 #endif
 #if PLATFORM_MAC
@@ -130,7 +111,7 @@ void AFurniLife::BeginPlay()
     if (!FFileHelper::LoadFileToArray(RawData, *ModelPath))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to load ONNX model from %s"), *ModelPath);
-        return false;
+        return;
     }
 
     UNNEModelData* ModelData = NewObject<UNNEModelData>();
@@ -162,34 +143,49 @@ void AFurniLife::Tick(float DeltaTime)
 
 bool AFurniLife::ReadFrame()
 {
-    if (!cap.isOpened()) return false;
-
+    if (!Camera_Texture2D || !cap.isOpened())
+        return false;
     cap.read(frame);
     if (frame.empty())
     {
-        UE_LOG(LogTemp, Error, TEXT("Captured frame is empty — skipping write."));
+        UE_LOG(LogTemp, Warning, TEXT("Camera frame is empty"));
         return false;
     }
-
-//    cv::Mat bgrFlipped;
-//    cv::flip(frame, bgrFlipped, 0);
+    
     ProcessInputForModel();
+
     RunModelInference();
     ApplySegmentationMask();
-
-    cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
     
-    for (int y = 0; y < frame.rows; ++y)
+    // Convert to BGRA (for Unreal)
+    cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
+
+    
+    cv::Mat flipped;
+    cv::flip(frame, flipped, 0); // Flip vertically for Unreal
+    int Width = VideoSize.X;
+    int Height = VideoSize.Y;
+    for (int y = 0; y < Height; ++y)
     {
-        for (int x = 0; x < frame.cols; ++x)
+        for (int x = 0; x < Width; ++x)
         {
-            cv::Vec4b pixel = frame.at<cv::Vec4b>(y, x);
-            ColorData[y * frame.cols + x] = FColor(pixel[2], pixel[1], pixel[0], pixel[3]);
+            cv::Vec4b& srcPixel = flipped.at<cv::Vec4b>(y, x);
+            int index = y * Width + x;
+            ColorData[index] = FColor(srcPixel[0], srcPixel[1], srcPixel[2], srcPixel[3]);
         }
     }
 
     static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
-    UpdateTextureRegions(Camera_Texture2D, 0, 1, &Region, VideoSize.X * sizeof(FColor), sizeof(FColor), reinterpret_cast<uint8*>(ColorData.GetData()), false);
+    UpdateTextureRegions(
+        Camera_Texture2D,
+        0,
+        1,
+        &Region,
+        VideoSize.X * sizeof(FColor),
+        sizeof(FColor),
+        reinterpret_cast<uint8*>(ColorData.GetData()),
+        false
+    );
     return true;
 }
 
@@ -218,8 +214,8 @@ void AFurniLife::RunModelInference()
 
     auto OutputTensors = OrtSession->Run(
         Ort::RunOptions{nullptr},
-        InputNames.data(), &InputTensorVal, 1,
-        OutputNames.data(), 1);
+        InputNames.GetData(), &InputTensorVal, 1,
+        OutputNames.GetData(), 1);
 
     float* OutData = OutputTensors[0].GetTensorMutableData<float>();
     OutputBuffer.assign(OutData, OutData + Height * Width);
@@ -270,36 +266,36 @@ void AFurniLife::RunModelInference()
 
 void AFurniLife::ApplySegmentationMask()
 {
-    const int Width = 320, Height = 320;
+
+    const int Width = 320;
+    const int Height = 320;
 #if PLATFORM_MAC
-    cv::Mat mask(Height, Width, CV_32FC1, OutputBuffer.GetData());
+    const float* MaskOutput = OutputTensors.Last().GetData();
+    cv::Mat mask(Height, Width, CV_32FC1, (void*)MaskOutput);
 #endif
 #if PLATFORM_IOS
     cv::Mat mask(Height, Width, CV_32FC1, OutputBuffer.data());
 #endif
     mask.convertTo(alphaMask, CV_8UC1, 255.0);
-    cv::resize(alphaMask, alphaMask, cv::Size(VideoSize.X, VideoSize.Y));
-
+    cv::resize(alphaMask, alphaMask, cv::Size(VideoSize.X, VideoSize.Y));  // Resize back to full resolution
     if (frame.channels() == 3)
+    {
         cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
-
+    }
     for (int y = 0; y < frame.rows; ++y)
     {
         for (int x = 0; x < frame.cols; ++x)
         {
             uchar alpha = alphaMask.at<uchar>(y, x);
-//            frame.at<cv::Vec4b>(y, x)[3] = (alpha < 64) ? 0 : 255;
             cv::Vec4b& px = frame.at<cv::Vec4b>(y, x);
             px[3] = (alpha < 64) ? 0 : alpha;
         }
     }
+    double minVal, maxVal;
+    cv::minMaxLoc(alphaMask, &minVal, &maxVal);
+    UE_LOG(LogTemp, Warning, TEXT("Alpha mask range: min = %f, max = %f"), minVal, maxVal);
 
-//    double minVal, maxVal;
-//    cv::minMaxLoc(alphaMask, &minVal, &maxVal);
-//    UE_LOG(LogTemp, Warning, TEXT("Alpha mask range: min = %f, max = %f"), minVal, maxVal);
 }
-
-
 
 static void UpdateTextureRegions(UTexture2D* Texture, int32 MipIndex, uint32 NumRegions, FUpdateTextureRegion2D* Regions,
                                  uint32 SrcPitch, uint32 SrcBpp, uint8* SrcData, bool bFreeData)

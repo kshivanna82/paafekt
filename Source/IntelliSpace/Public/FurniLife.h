@@ -6,6 +6,7 @@
 #include "opencv2/core.hpp"
 #include "opencv2/highgui.hpp"
 #include "opencv2/videoio.hpp"
+#include <opencv2/imgcodecs.hpp>
 #define check(expr) UE_CHECK_IMPL(expr)
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -27,14 +28,12 @@
 #include "NNE.h"
 #include "NNERuntime.h"
 #include "NNERuntimeCPU.h"
+#include "NNEModelData.h"
 #endif
 #if PLATFORM_IOS
 #include <onnxruntime/core/session/onnxruntime_cxx_api.h>
 #endif
 
-//#if PLATFORM_IOS
-//namespace Ort { struct Session; }
-//#endif
 #include "FurniLife.generated.h"
 
 
@@ -129,11 +128,15 @@ public:
     Ort::SessionOptions SessionOptions;
     Ort::Session* OrtSession = nullptr;
 
+    std::vector<std::string> InputNameStrs;
+    std::vector<std::string> OutputNameStrs;
+    TArray<const char*> InputNames;
+    TArray<const char*> OutputNames;
     //int32 FrameCounter;
-    FString OutputDir;
-    
-    std::vector<const char*> InputNames;
-    std::vector<const char*> OutputNames;
+//    FString OutputDir;
+//    
+//    std::vector<const char*> InputNames;
+//    std::vector<const char*> OutputNames;
     std::vector<float> OutputBuffer;
 
 #endif
