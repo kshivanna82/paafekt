@@ -134,7 +134,7 @@ public:
     TArray<const char*> OutputNames;
     //int32 FrameCounter;
 //    FString OutputDir;
-//    
+//
 //    std::vector<const char*> InputNames;
 //    std::vector<const char*> OutputNames;
     std::vector<float> OutputBuffer;
