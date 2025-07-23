@@ -84,6 +84,10 @@ public:
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UMaterialInstanceDynamic* Camera_MatPost;
     
+//    UPROPERTY(EditAnywhere, Category = "Materials")
+//        UMaterialInterface* BaseMaterial;
+
+    
         
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         USceneComponent* rootComp;

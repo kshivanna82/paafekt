@@ -77,7 +77,7 @@ void AFurniLife::BeginPlay()
     Camera_Texture2D->UpdateResource();
 
 #if PLATFORM_IOS
-    FString OnnxPath = FString([[NSBundle mainBundle] pathForResource:@"U2NET1" ofType:@"onnx"]);
+    FString OnnxPath = FString([[NSBundle mainBundle] pathForResource:@"u2net" ofType:@"mlmodel"]);
     TArray<uint8> FileData;
     std::ifstream file(TCHAR_TO_UTF8(*OnnxPath), std::ios::binary | std::ios::ate);
     if (file)
@@ -136,7 +136,8 @@ void AFurniLife::BeginPlay()
 //    }
 
 
-    std::string lastValidName = "1965";
+//    std::string lastValidName = "1965";
+    std::string lastValidName = "out_p0";
     OutputNameStrs = { lastValidName };
     OutputNames.Empty();
     OutputNames.Add(OutputNameStrs.back().c_str());
@@ -199,6 +200,39 @@ bool AFurniLife::ReadFrame()
         UE_LOG(LogTemp, Warning, TEXT("Camera frame is empty"));
         return false;
     }
+     
+    VideoSize = FVector2D(frame.cols, frame.rows);
+    
+    // Update texture if resolution has changed
+//    if (ImagePlatePost)
+//    {
+//        if (!BaseMaterial)
+//        {
+//            UE_LOG(LogTemp, Error, TEXT("❌ BaseMaterial is null at runtime."));
+//            return false;
+//        }
+//
+//        if (!Camera_Texture2D)
+//        {
+//            UE_LOG(LogTemp, Error, TEXT("❌ Camera_Texture2D is null — cannot bind to material."));
+//            return false;
+//        }
+//
+//        UMaterialInstanceDynamic* DynMat = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+//        if (!DynMat)
+//        {
+//            UE_LOG(LogTemp, Error, TEXT("❌ Failed to create dynamic material instance."));
+//            return false;
+//        }
+//
+//        DynMat->SetTextureParameterValue(FName("Texture"), Camera_Texture2D);
+//        ImagePlatePost->SetMaterial(0, DynMat);
+//        UE_LOG(LogTemp, Warning, TEXT("✅ Material bound successfully with Camera_Texture2D %s"), *Camera_Texture2D->GetName());
+//    }
+
+
+    
+
     
     ProcessInputForModel();
 
@@ -244,6 +278,22 @@ bool AFurniLife::ReadFrame()
     int32 SrcPitch = static_cast<int32>(VideoSize.X * sizeof(FColor));
     UE_LOG(LogTemp, Warning, TEXT("SrcPitchjkfjgkfjgkgjhkjhkj = %d"), SrcPitch);
 
+    UE_LOG(LogTemp, Warning, TEXT("frame step = %llu, cols = %d, elemSize = %d"),
+           static_cast<uint64>(frame.step), frame.cols, frame.elemSize());
+
+    UE_LOG(LogTemp, Warning, TEXT("frame size = %d x %d, isContinuous = %s, type = %d"),
+           frame.cols, frame.rows,
+           frame.isContinuous() ? TEXT("true") : TEXT("false"),
+           static_cast<int>(frame.type()));
+
+    
+    if (!frame.isContinuous() || frame.type() != CV_8UC4)
+    {
+        cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
+        frame = frame.clone();
+    }
+
+
 
     static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
     UpdateTextureRegions(
@@ -251,7 +301,8 @@ bool AFurniLife::ReadFrame()
         0,
         1,
         &Region,
-        VideoSize.X * sizeof(FColor),
+//        VideoSize.X * sizeof(FColor),
+                         SrcPitch,
         sizeof(FColor),
         reinterpret_cast<uint8*>(ColorData.GetData()),
         false
@@ -383,15 +434,24 @@ void AFurniLife::ApplySegmentationMask()
 
     const int Width = 320;
     const int Height = 320;
-#if PLATFORM_MAC
+    #if PLATFORM_MAC
     const float* MaskOutput = OutputTensors.Last().GetData();
     cv::Mat mask(Height, Width, CV_32FC1, (void*)MaskOutput);
-#endif
-#if PLATFORM_IOS
+    #endif
+    #if PLATFORM_IOS
     cv::Mat mask(Height, Width, CV_32FC1, OutputBuffer.data());
-#endif
-    mask.convertTo(alphaMask, CV_8UC1, 255.0);
-    cv::resize(alphaMask, alphaMask, cv::Size(VideoSize.X, VideoSize.Y));  // Resize back to full resolution
+    #endif
+
+    // ADD: Clamp to [0.0, 1.0]
+    cv::Mat clamped;
+    cv::threshold(mask, clamped, 1.0f, 1.0f, cv::THRESH_TRUNC);
+
+    // Convert to 8-bit
+    clamped.convertTo(alphaMask, CV_8UC1, 255.0);
+
+    // Resize
+    cv::resize(alphaMask, alphaMask, cv::Size(VideoSize.X, VideoSize.Y));
+    
     if (frame.channels() == 3)
     {
         UE_LOG(LogTemp, Warning, TEXT("in if of frameeeeeeeeeeeee.channels() : %d"), frame.channels());
@@ -407,7 +467,8 @@ void AFurniLife::ApplySegmentationMask()
         {
             uchar alpha = alphaMask.at<uchar>(y, x);
             cv::Vec4b& px = frame.at<cv::Vec4b>(y, x);
-            px[3] = (alpha < 64) ? 0 : alpha;
+//            px[3] = (alpha < 64) ? 0 : alpha;
+            px[3] = alpha;
 //            px[3] = 255;
         }
     }
@@ -432,16 +493,45 @@ static void UpdateTextureRegions(UTexture2D* Texture, int32 MipIndex, uint32 Num
             uint32 Bpp;
             bool bFree;
         };
-        //UE_LOG(LogTemp, Warning, TEXT("SrcPitch = %d"), VideoSize.X * sizeof(FColor));
 
         FUpdateContext* Context = new FUpdateContext{Texture, MipIndex, Regions, SrcData, SrcPitch, SrcBpp, bFreeData};
+
         ENQUEUE_RENDER_COMMAND(UpdateTextureRegionsData)(
             [Context](FRHICommandListImmediate& RHICmdList)
             {
                 FTexture2DResource* TexRes = static_cast<FTexture2DResource*>(Context->Tex->GetResource());
-                RHIUpdateTexture2D(TexRes->GetTexture2DRHI(), Context->Mip, *Context->Region, Context->Pitch, Context->Data);
-                if (Context->bFree) FMemory::Free(Context->Data);
+#if PLATFORM_IOS
+                uint32 DestStride = 0;
+                void* TextureMemory = RHICmdList.LockTexture2D(
+                    TexRes->GetTexture2DRHI(),
+                    Context->Mip,
+                    RLM_WriteOnly,
+                    DestStride,
+                    false);
+
+                const uint32 WidthInBytes = Context->Region->Width * Context->Bpp;
+                for (uint32 y = 0; y < Context->Region->Height; ++y)
+                {
+                    uint8* DestRow = static_cast<uint8*>(TextureMemory) + y * DestStride;
+                    const uint8* SrcRow = Context->Data + y * Context->Pitch;
+                    FMemory::Memcpy(DestRow, SrcRow, WidthInBytes);
+                }
+
+                RHICmdList.UnlockTexture2D(TexRes->GetTexture2DRHI(), Context->Mip, false);
+#else
+                RHIUpdateTexture2D(
+                    TexRes->GetTexture2DRHI(),
+                    Context->Mip,
+                    *Context->Region,
+                    Context->Pitch,
+                    Context->Data);
+#endif
+                if (Context->bFree)
+                {
+                    FMemory::Free(Context->Data);
+                }
                 delete Context;
             });
     }
 }
+
