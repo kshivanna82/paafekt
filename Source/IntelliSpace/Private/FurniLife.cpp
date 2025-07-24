@@ -10,7 +10,10 @@
 #if PLATFORM_IOS
 #include <Foundation/Foundation.h>
 #include <fstream>
-#include <mutex>
+//#include <mutex>
+#import <UIKit/UIKit.h>
+#import "CoreMLModelBridge.h"
+FCoreMLModelBridge* CoreMLBridge = nullptr;
 #endif
 
 
@@ -29,6 +32,9 @@ AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(Obje
     isStreamOpen = false;
     VideoSize = FVector2D(1920, 1080);
     RefreshRate = 30.0f;
+    #if PLATFORM_IOS
+    CoreMLBridge = nullptr;
+    #endif
 }
 
 static void UpdateTextureRegions(
@@ -77,6 +83,10 @@ void AFurniLife::BeginPlay()
     Camera_Texture2D->UpdateResource();
 
 #if PLATFORM_IOS
+    
+    
+    
+    
     FString OnnxPath = FString([[NSBundle mainBundle] pathForResource:@"u2net" ofType:@"mlmodel"]);
     TArray<uint8> FileData;
     std::ifstream file(TCHAR_TO_UTF8(*OnnxPath), std::ios::binary | std::ios::ate);
@@ -89,70 +99,19 @@ void AFurniLife::BeginPlay()
         file.close();
     }
 
-    Ort::SessionOptions SessionOptions;
-    SessionOptions.SetIntraOpNumThreads(1);
-    SessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
-    OrtSession = new Ort::Session(OrtEnv, FileData.GetData(), FileData.Num(), SessionOptions);
-    
-//    OrtAllocator* RawAllocator = nullptr;
-//    // INPUT name
-//    char* inputName = nullptr;
-//    Ort::ThrowOnError(OrtGetApiBase()->GetApi(ORT_API_VERSION)->SessionGetInputName(*OrtSession, 0, RawAllocator, &inputName));
-//    InputNameStrs.emplace_back(inputName);
-//    InputNames.Add(InputNameStrs.back().c_str());
-//    Ort::GetApi().AllocatorFree(RawAllocator, inputName);
+    //Kishore
+    // CoreML Model Path
+    NSString* ModelPath = [[NSBundle mainBundle] pathForResource:@"u2net" ofType:@"mlmodelc"];
+    if (!ModelPath) {
+        UE_LOG(LogTemp, Error, TEXT("❌ Could not find u2net.mlmodelc in bundle."));
+        return;
+    }
 
-    OrtAllocator* RawAllocator = nullptr;
-    Ort::ThrowOnError(OrtGetApiBase()->GetApi(ORT_API_VERSION)->GetAllocatorWithDefaultOptions(&RawAllocator));
-
-    // Populate InputNames
-    char* inputName = nullptr;
-    Ort::ThrowOnError(OrtGetApiBase()->GetApi(ORT_API_VERSION)->SessionGetInputName(*OrtSession, 0, RawAllocator, &inputName));
-    InputNameStrs.emplace_back(inputName);
-    InputNames.Add(InputNameStrs.back().c_str());
-    Ort::GetApi().AllocatorFree(RawAllocator, inputName);
-//
-//    Ort::AllocatorWithDefaultOptions allocator;
-//    size_t outputCount = OrtSession->GetOutputCount();
-//
-//    for (size_t i = 0; i < outputCount; ++i)
-//    {
-//        char* outputName = nullptr;
-//        OrtStatus* status = Ort::GetApi().SessionGetOutputName(*OrtSession, i, allocator, &outputName);
-//        if (status != nullptr)
-//        {
-//            const char* msg = Ort::GetApi().GetErrorMessage(status);
-//            UE_LOG(LogTemp, Error, TEXT("❌ Failed to get output name [%zu]: %s"), i, *FString(msg));
-//            Ort::GetApi().ReleaseStatus(status);
-//            continue;
-//        }
-//
-//        // ✅ Safe: copy the name
-//        std::string CopiedName(outputName);
-//        OutputNameStrs.emplace_back(CopiedName);                      // Keep ownership
-//        OutputNames.Add(OutputNameStrs.back().c_str());               // Use valid pointer
-//        UE_LOG(LogTemp, Warning, TEXT("✔ Output name [%zu]: %s"), i, *FString(CopiedName.c_str()));
-//        Ort::GetApi().AllocatorFree(allocator, outputName);           // Free heap-allocated name
-//    }
-
-
-//    std::string lastValidName = "1965";
-    std::string lastValidName = "out_p0";
-    OutputNameStrs = { lastValidName };
-    OutputNames.Empty();
-    OutputNames.Add(OutputNameStrs.back().c_str());
-
-    UE_LOG(LogTemp, Warning, TEXT("Using only outpuuuuuuuuuut: %s"), *FString(lastValidName.c_str()));
-
-
-
-    UE_LOG(LogTemp, Warning, TEXT("Total OutputNames = %d"), OutputNames.Num());
-
-
-    UE_LOG(LogTemp, Warning, TEXT("Total OutputNameshjhgjfhgjfghjfhgjfhgjfhg = %d"), OutputNames.Num());
-    UE_LOG(LogTemp, Warning, TEXT("Total 7676776767676776767 = %d"), OutputNames.Num());
-
-
+    CoreMLBridge = new FCoreMLModelBridge();
+    if (!CoreMLBridge->LoadModel([ModelPath UTF8String])) {
+        UE_LOG(LogTemp, Error, TEXT("❌ Failed to load CoreML model."));
+        return;
+    }
 #endif
 #if PLATFORM_MAC
     FString ModelPath = FPaths::ProjectConfigDir() / TEXT("Models/U2NET1.onnx");
@@ -318,66 +277,32 @@ void AFurniLife::ProcessInputForModel()
 
 }
 
+void AFurniLife::BeginDestroy()
+{
+#if PLATFORM_IOS
+    if (CoreMLBridge)
+    {
+        delete CoreMLBridge;
+        CoreMLBridge = nullptr;
+    }
+#endif
+    Super::BeginDestroy();
+}
+
+
 void AFurniLife::RunModelInference()
 {
 #if PLATFORM_IOS
-    Ort::AllocatorWithDefaultOptions allocator;
-
     const int Width = 320, Height = 320;
-    std::vector<float> InputTensor(1 * 3 * Height * Width);
-    int idx = 0;
-    for (int c = 0; c < 3; ++c)
-        for (int y = 0; y < Height; ++y)
-            for (int x = 0; x < Width; ++x)
-                InputTensor[idx++] = resized.at<cv::Vec3f>(y, x)[c];
-
-    if (OutputNames.Num() == 0)
-    {
-        UE_LOG(LogTemp, Error, TEXT("OutputNames is empty — skipping inference."));
+    
+    
+    std::vector<float> OutputData;
+    if (!CoreMLBridge || !CoreMLBridge->RunModel(resized, OutputData)) {
+        UE_LOG(LogTemp, Error, TEXT("❌ CoreML inference failed."));
         return;
     }
-
-    Ort::MemoryInfo MemInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-    std::vector<int64_t> InputShape = {1, 3, Height, Width};
-    Ort::Value InputTensorVal = Ort::Value::CreateTensor<float>(MemInfo, InputTensor.data(), InputTensor.size(), InputShape.data(), InputShape.size());
-
-    std::vector<Ort::Value> OutputTensors;
-    UE_LOG(LogTemp, Warning, TEXT("Total 767677676767677676jhghjfhg7 = %d"), OutputNames.Num());
-    try
-    {
-        for (int i = 0; i < InputNames.Num(); ++i)
-        {
-            FString NameStr(InputNames[i]);
-            UE_LOG(LogTemp, Warning, TEXT("✔ InputNameeeeeeeee[%d] = %s"), i, *NameStr);
-        }
-        
-        for (int i = 0; i < OutputNames.Num(); ++i)
-        {
-            FString NameStr(OutputNames[i]);
-            UE_LOG(LogTemp, Warning, TEXT("✔ OutputnnnnnnnnnnnnName[%d] = %s"), i, *NameStr);
-        }
-
-
-        OutputTensors = OrtSession->Run(
-            Ort::RunOptions{nullptr},
-            InputNames.GetData(), &InputTensorVal, 1,
-            OutputNames.GetData(), OutputNames.Num());
-
-        UE_LOG(LogTemp, Warning, TEXT("Inference succeeded. Output tensor count: %d"), (int)OutputTensors.size());
-
-        float* OutData = OutputTensors.back().GetTensorMutableData<float>();
-        OutputBuffer.assign(OutData, OutData + Height * Width);
-
-        auto shape = OutputTensors.back().GetTensorTypeAndShapeInfo().GetShape();
-        UE_LOG(LogTemp, Warning, TEXT("Output Shape = [%lld, %lld, %lld, %lld]"),
-            shape[0], shape[1], shape[2], shape[3]);
-    }
-    catch (const Ort::Exception& e)
-    {
-        UE_LOG(LogTemp, Error, TEXT("ONNX Inference failed: %s"), *FString(e.what()));
-        return;
-    }
-
+    OutputBuffer = std::move(OutputData);
+    UE_LOG(LogTemp, Warning, TEXT("✅ CoreML inference success. Output size: %d"), (int)OutputBuffer.size());
 
     
     

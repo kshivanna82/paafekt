@@ -1,21 +1,22 @@
 #pragma once
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
 #ifdef check
 #undef check
 #endif
-#include "opencv2/imgproc.hpp"
-#include "opencv2/core.hpp"
-#include "opencv2/highgui.hpp"
-#include "opencv2/videoio.hpp"
+#include <opencv2/imgproc.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/videoio.hpp>
 #include <opencv2/imgcodecs.hpp>
 #define check(expr) UE_CHECK_IMPL(expr)
-#include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
+
 #include "ImagePlateComponent.h"
 
 #include "Templates/UniquePtr.h"
-#include "UObject/Class.h"
-#include "UObject/Object.h"
-#include "UObject/UObjectBaseUtility.h"
+//#include "UObject/Class.h"
+//#include "UObject/Object.h"
+//#include "UObject/UObjectBaseUtility.h"
 
 #include "Materials/MaterialInstanceDynamic.h"
 #include "MediaPlayer.h"
@@ -30,9 +31,9 @@
 #include "NNERuntimeCPU.h"
 #include "NNEModelData.h"
 #endif
-#if PLATFORM_IOS
-#include <onnxruntime/core/session/onnxruntime_cxx_api.h>
-#endif
+//#if PLATFORM_IOS
+//#include <onnxruntime/core/session/onnxruntime_cxx_api.h>
+//#endif
 
 #include "FurniLife.generated.h"
 
@@ -47,6 +48,7 @@ protected:
     virtual void BeginPlay() override;
 public:
     virtual void Tick(float DeltaTime) override;
+    virtual void BeginDestroy() override;
     UFUNCTION(BlueprintImplementableEvent, Category = Camera)
         void OnNextVideoFrame();
     UFUNCTION(BlueprintCallable, Category = Camera)
@@ -128,14 +130,14 @@ public:
 #endif
 #if PLATFORM_IOS
 
-    Ort::Env OrtEnv{ORT_LOGGING_LEVEL_WARNING, "FurniLife"};
-    Ort::SessionOptions SessionOptions;
-    Ort::Session* OrtSession = nullptr;
-
-    std::vector<std::string> InputNameStrs;
-    std::vector<std::string> OutputNameStrs;
-    TArray<const char*> InputNames;
-    TArray<const char*> OutputNames;
+//    Ort::Env OrtEnv{ORT_LOGGING_LEVEL_WARNING, "FurniLife"};
+//    Ort::SessionOptions SessionOptions;
+//    Ort::Session* OrtSession = nullptr;
+//
+//    std::vector<std::string> InputNameStrs;
+//    std::vector<std::string> OutputNameStrs;
+//    TArray<const char*> InputNames;
+//    TArray<const char*> OutputNames;
     //int32 FrameCounter;
 //    FString OutputDir;
 //

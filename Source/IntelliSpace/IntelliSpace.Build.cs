@@ -8,8 +8,13 @@ public class IntelliSpace : ModuleRules
 	public IntelliSpace(ReadOnlyTargetRules Target) : base(Target)
 	{
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-        bEnableExceptions = true;
-
+        if (Target.Platform == UnrealTargetPlatform.IOS)
+        {
+            //PublicDefinitions.Add("UE_ENABLE_RTTI=1");
+            //PublicDefinitions.Add("UE_ENABLE_EXCEPTIONS=1");
+            bUseRTTI = true;
+            bEnableExceptions = true;
+        }
 
         	string ProjectRoot = Path.Combine(ModuleDirectory, "../..");
          //string ProjectRoot = Path.GetFullPath(Path.Combine(ModuleDirectory, "../.."));
@@ -88,17 +93,19 @@ public class IntelliSpace : ModuleRules
 
         	if (Target.Platform == UnrealTargetPlatform.IOS)
         	{
-                    //PrivateExcludePaths.Add("Private/IOSNNERunner.cpp");
+                 
+
+                
+                    //string ModelPathForUnet = Path.Combine(ModuleDirectory, "/Users/al/Documents/tries/ML/u2net.mlmodelc");
+                    //RuntimeDependencies.Add(ModelPathForUnet);
+                    
+                    
             		string OpenCVModulesPath = "/Volumes/ExtremSSD/tries/opencv";
-            		string OpenCVLibPath = Path.Combine(OpenCVModulesPath, "build_ios");
+                    string OpenCVLibPath = Path.Combine(OpenCVModulesPath, "build_ios");
+            		//string OpenCVModuleDirectory = "/Volumes/ExtremSSD/projects/IntelliSpace/Source/IntelliSpace";
 
                     PublicDefinitions.Add("USE_DIRECT_ONNX=1");
             		PublicDefinitions.Add("ORT_NO_EXCEPTIONS");
-            		
-
-            		// ONNX Headers
-            		//PublicIncludePaths.Add(ONNXIncludePath);
-            		//PublicIncludePaths.Add(Path.Combine(ONNXIncludePath, "onnxruntime", "core", "session"));
 
             		// ONNX Librariesssssssssssssssss
                     string[] ORTLibraries = new string[]
@@ -170,8 +177,21 @@ public class IntelliSpace : ModuleRules
             		{
                 		PublicIncludePaths.Add(Path.Combine(OpenCVModulesPath, "modules", module, "include"));
                     }
+                    
+                    //PublicIncludePaths.Add(Path.Combine(OpenCVModuleDirectory, "Public"));
+                    //PrivateIncludePaths.Add(Path.Combine(OpenCVModuleDirectory, "Private"));
+                    //kish
+                    //PublicIncludePaths.Add(Path.Combine(OpenCVModulesPath, "/include"));
+                    //PublicIncludePaths.Add(Path.Combine(OpenCVModulesPath, "/build_ios/install_ios/include/opencv4"));
+                    
+                    PublicIncludePaths.Add(Path.Combine(OpenCVModulesPath, "build_ios/install_ios/include"));
+                    PublicIncludePaths.Add(Path.Combine(OpenCVModulesPath, "build_ios/install_ios/include/opencv4"));
+
+
+
+                    
                     PublicIncludePaths.Add(Path.Combine(ONNXRoot, "include"));
-                    //PublicIncludePaths.Add(Path.Combine(ONNXRoot, "build_ios", "Release", "_deps", "onnx-src", "onnx"));
+                    
 
             		PublicIncludePaths.Add(OpenCVLibPath);
 
@@ -203,19 +223,21 @@ public class IntelliSpace : ModuleRules
 
             		PublicFrameworks.AddRange(new string[]
             		{
-                		"Accelerate", "AVFoundation", "CoreMedia", "CoreVideo"
+                		"Accelerate", "AVFoundation", "CoreMedia", "CoreVideo", "CoreML", "UIKit", "Vision", "Foundation"
             		});
+              
+                    //PrivateIncludePaths.Add("IntelliSpace/Private");
         	}
          
 
         	PublicDependencyModuleNames.AddRange(new string[]
             {
-                    "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate"
+                    "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate", "Projects"
             });
 
             PrivateDependencyModuleNames.AddRange(new string[]
             {
-                    "Core", "CoreUObject", "Engine", "Renderer", "RenderCore", "RHI", "RHICore"
+                    "Core", "CoreUObject", "Engine", "Renderer", "RenderCore", "RHI", "RHICore", "Projects"
             });
 	}
 }
