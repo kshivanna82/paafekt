@@ -2,6 +2,7 @@
 
 #include <opencv2/core.hpp>
 #include <vector>
+#include <CoreVideo/CoreVideo.h>
 
 #ifdef __OBJC__
 @class U2NetRunner;  // Forward declare the Objective-C class when compiling as Objective-C++
@@ -17,6 +18,7 @@ public:
 
     bool LoadModel(const char* ModelPath);
     bool RunModel(const cv::Mat& InputImage, std::vector<float>& OutputData);
+    bool RunModel(CVPixelBufferRef PixelBuffer, std::vector<float>& OutputData);
 
 private:
     void* Impl;  // Internal ObjC++ object

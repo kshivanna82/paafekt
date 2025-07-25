@@ -9,9 +9,11 @@
 #import "CoreMLModelBridge.h"
 #import <Foundation/Foundation.h>
 #import <CoreML/CoreML.h>
+#if PLATFORM_IOS
 #import <UIKit/UIKit.h>
+#endif
 
-
+#if PLATFORM_IOS
 // ---------------------------
 // 🔁 cv::Mat to UIImage Helper
 // ---------------------------
@@ -158,12 +160,62 @@ UIImage* UIImageFromCVMat(const cv::Mat& mat)
         return nil;
     }
 
-    MLMultiArray* arr = [result featureValueForName:@"output"].multiArrayValue;  // Change name if needed
+    MLFeatureValue* feature = [result featureValueForName:@"output"];
+    if (!feature || feature.type != MLFeatureTypeMultiArray) {
+        NSLog(@"❌ Output feature 'output' is missing or wrong type");
+        return nil;
+    }
+    MLMultiArray* arr = feature.multiArrayValue;
+
     NSMutableArray* output = [NSMutableArray arrayWithCapacity:arr.count];
     for (NSUInteger i = 0; i < arr.count; i++)
         [output addObject:arr[i]];
 
     return output;
+}
+
+- (NSArray<NSNumber*>*)runWithPixelBuffer:(CVPixelBufferRef)buffer {
+    U2NetInput* input = [U2NetInput new];
+    [input setImage:buffer];
+
+    NSError* err = nil;
+    id<MLFeatureProvider> result = [self.model predictionFromFeatures:input error:&err];
+    if (!result || err) {
+        NSLog(@"❌ Inference error (pixel buffer): %@", err.localizedDescription);
+        return nil;
+    }
+    NSLog(@"✅ Available output featuresSSSSSSSSSSSSSS: %@", result.featureNames);
+
+
+    MLFeatureValue* feature = [result featureValueForName:@"out_p6"];
+    if (!feature || feature.type != MLFeatureTypeImage) {
+        NSLog(@"❌ Output feature 'out_p6' is missing or not an image.");
+        return nil;
+    }
+    CVPixelBufferRef outBuffer = feature.imageBufferValue;
+
+    CVPixelBufferLockBaseAddress(outBuffer, kCVPixelBufferLock_ReadOnly);
+
+    size_t width = CVPixelBufferGetWidth(outBuffer);
+    size_t height = CVPixelBufferGetHeight(outBuffer);
+    size_t stride = CVPixelBufferGetBytesPerRow(outBuffer);
+    void* base = CVPixelBufferGetBaseAddress(outBuffer);
+
+    // Usually single-channel 8-bit
+    uint8_t* pixels = (uint8_t*)base;
+    NSMutableArray* output = [NSMutableArray arrayWithCapacity:width * height];
+
+    for (size_t y = 0; y < height; y++) {
+        uint8_t* row = pixels + y * stride;
+        for (size_t x = 0; x < width; x++) {
+            float normalized = row[x] / 255.0f;
+            [output addObject:@(normalized)];
+        }
+    }
+
+    CVPixelBufferUnlockBaseAddress(outBuffer, kCVPixelBufferLock_ReadOnly);
+    return output;
+
 }
 @end
 
@@ -209,3 +261,25 @@ bool FCoreMLModelBridge::RunModel(const cv::Mat& InputImage, std::vector<float>&
         OutputData[i] = out[i].floatValue;
     return true;
 }
+
+bool FCoreMLModelBridge::RunModel(CVPixelBufferRef PixelBuffer, std::vector<float>& OutputData) {
+    FCoreMLImpl* CoreML = static_cast<FCoreMLImpl*>(Impl);
+    NSArray<NSNumber*>* out = [CoreML->runner runWithPixelBuffer:PixelBuffer];
+
+    if (!out || out.count == 0)
+    {
+        AsyncTask(ENamedThreads::GameThread, []() {
+            UE_LOG(LogTemp, Error, TEXT("❌ CoreML inference failed or output empty."));
+        });
+        return false;
+    }
+
+    // Convert NSArray to std::vector
+    OutputData.resize(out.count);
+    for (NSUInteger i = 0; i < out.count; ++i)
+        OutputData[i] = out[i].floatValue;
+
+    return true;
+}
+
+#endif

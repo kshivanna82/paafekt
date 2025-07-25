@@ -253,6 +253,12 @@ bool AFurniLife::ReadFrame()
     }
 
 
+    UE_LOG(LogTemp, Warning, TEXT("❗ Frame size = %d x %d, elemSize = %zu, step = %zu, isContinuous = %s"),
+           frame.cols, frame.rows, frame.elemSize(), frame.step[0], frame.isContinuous() ? TEXT("true") : TEXT("false"));
+
+    UE_LOG(LogTemp, Warning, TEXT("🧵 About to update texture with BGRA frame..."));
+
+    
 
     static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
     UpdateTextureRegions(
@@ -294,21 +300,81 @@ void AFurniLife::RunModelInference()
 {
 #if PLATFORM_IOS
     const int Width = 320, Height = 320;
-    
-    
-    std::vector<float> OutputData;
-    if (!CoreMLBridge || !CoreMLBridge->RunModel(resized, OutputData)) {
-        UE_LOG(LogTemp, Error, TEXT("❌ CoreML inference failed."));
+
+    if (resized.channels() == 3) {
+        cv::cvtColor(resized, resized, cv::COLOR_BGR2RGBA);
+    } else if (resized.channels() == 4) {
+        cv::cvtColor(resized, resized, cv::COLOR_BGRA2RGBA);
+    }
+
+    CVPixelBufferRef pixelBuffer = nullptr;
+    NSDictionary* attrs = @{
+        (__bridge NSString*)kCVPixelBufferCGImageCompatibilityKey: @YES,
+        (__bridge NSString*)kCVPixelBufferCGBitmapContextCompatibilityKey: @YES
+    };
+    CVReturn status = CVPixelBufferCreate(kCFAllocatorDefault,
+                                          Width,
+                                          Height,
+                                          kCVPixelFormatType_32BGRA,
+                                          (__bridge CFDictionaryRef)attrs,
+                                          &pixelBuffer);
+
+    if (status != kCVReturnSuccess || pixelBuffer == nullptr) {
+        UE_LOG(LogTemp, Error, TEXT("❌ Failed to create CVPixelBuffer"));
         return;
     }
+
+    CVPixelBufferLockBaseAddress(pixelBuffer, 0);
+    uint8_t* dstBase = reinterpret_cast<uint8_t*>(CVPixelBufferGetBaseAddress(pixelBuffer));
+    const size_t dstBytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer);
+
+    if (!dstBase || !resized.data) {
+        UE_LOG(LogTemp, Error, TEXT("❌ PixelBuffer or resized image data is NULL"));
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+        CVPixelBufferRelease(pixelBuffer);
+        return;
+    }
+
+    const int srcStride = resized.step[0];
+    const int srcCols = resized.cols;
+    const int srcRows = resized.rows;
+
+    for (int y = 0; y < srcRows; ++y)
+    {
+        const cv::Vec4b* srcRow = resized.ptr<cv::Vec4b>(y);
+        uint8_t* dstRow = dstBase + y * dstBytesPerRow;
+        for (int x = 0; x < srcCols; ++x)
+        {
+            const cv::Vec4b& px = srcRow[x];
+            // CoreML expects BGRA in CVPixelBuffer
+            dstRow[x * 4 + 0] = px[0]; // B
+            dstRow[x * 4 + 1] = px[1]; // G
+            dstRow[x * 4 + 2] = px[2]; // R
+            dstRow[x * 4 + 3] = px[3]; // A
+        }
+    }
+
+    CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+
+    std::vector<float> OutputData;
+    if (!CoreMLBridge || !CoreMLBridge->RunModel(pixelBuffer, OutputData)) {
+        UE_LOG(LogTemp, Error, TEXT("❌ CoreML inference failed."));
+        CVPixelBufferRelease(pixelBuffer);
+        return;
+    }
+
     OutputBuffer = std::move(OutputData);
+    CVPixelBufferRelease(pixelBuffer);
+
     UE_LOG(LogTemp, Warning, TEXT("✅ CoreML inference success. Output size: %d"), (int)OutputBuffer.size());
 
-    
-    
-    
-    
-//    OutputBuffer.assign(OutData, OutData + Height * Width);
+    float maxOut = -FLT_MAX, minOut = FLT_MAX;
+    for (float v : OutputBuffer) {
+        if (v < minOut) minOut = v;
+        if (v > maxOut) maxOut = v;
+    }
+    UE_LOG(LogTemp, Warning, TEXT("[Output Debug] CoreML raw output range: min = %f, max = %f"), minOut, maxOut);
+
 #endif
 #if PLATFORM_MAC
     const int Width = 320;
@@ -364,15 +430,28 @@ void AFurniLife::ApplySegmentationMask()
     cv::Mat mask(Height, Width, CV_32FC1, (void*)MaskOutput);
     #endif
     #if PLATFORM_IOS
+    if (OutputBuffer.empty()) {
+        UE_LOG(LogTemp, Error, TEXT("❌ OutputBuffer is empty. Skipping mask processing."));
+        return;
+    }
     cv::Mat mask(Height, Width, CV_32FC1, OutputBuffer.data());
     #endif
 
+#if PLATFORM_MAC
     // ADD: Clamp to [0.0, 1.0]
     cv::Mat clamped;
     cv::threshold(mask, clamped, 1.0f, 1.0f, cv::THRESH_TRUNC);
 
     // Convert to 8-bit
     clamped.convertTo(alphaMask, CV_8UC1, 255.0);
+#endif
+    
+#if PLATFORM_IOS
+    cv::Mat normalized;
+    cv::normalize(mask, normalized, 0.0f, 1.0f, cv::NORM_MINMAX);  // Force into [0, 1]
+    normalized.convertTo(alphaMask, CV_8UC1, 255.0);
+#endif
+    
 
     // Resize
     cv::resize(alphaMask, alphaMask, cv::Size(VideoSize.X, VideoSize.Y));
