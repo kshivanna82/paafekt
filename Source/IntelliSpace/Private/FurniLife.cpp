@@ -51,8 +51,8 @@ static void UpdateTextureRegions(
 void AFurniLife::BeginPlay()
 {
     
-    UE_LOG(LogTemp, Warning, TEXT("FurniLife::BeginPlay (before Super) this=%p"), this);
-    UE_LOG(LogTemp, Warning, TEXT("rootComp=%p, ImagePlateRaw=%p, ImagePlatePost=%p"), rootComp, ImagePlateRaw, ImagePlatePost);
+//    UE_LOG(LogTemp, Warning, TEXT("FurniLife::BeginPlay (before Super) this=%p"), this);
+//    UE_LOG(LogTemp, Warning, TEXT("rootComp=%p, ImagePlateRaw=%p, ImagePlatePost=%p"), rootComp, ImagePlateRaw, ImagePlatePost);
 
     Super::BeginPlay();
     UE_LOG(LogTemp, Warning, TEXT("Returned from Super::BeginPlay()"));
@@ -76,9 +76,9 @@ void AFurniLife::BeginPlay()
 #endif
     Camera_Texture2D->LODGroup = TEXTUREGROUP_UI;
     Camera_Texture2D->CompressionSettings = TC_Default;
-    Camera_Texture2D->SRGB = Camera_RenderTarget->SRGB;
-//    Camera_Texture2D->NeverStream = true;
-//    Camera_Texture2D->SRGB = false;
+//    Camera_Texture2D->SRGB = Camera_RenderTarget->SRGB;
+    Camera_Texture2D->NeverStream = true;
+    Camera_Texture2D->SRGB = false;
     VideoMask_Texture2D->SRGB = false;
     Camera_Texture2D->UpdateResource();
 
@@ -87,17 +87,17 @@ void AFurniLife::BeginPlay()
     
     
     
-    FString OnnxPath = FString([[NSBundle mainBundle] pathForResource:@"u2net" ofType:@"mlmodel"]);
-    TArray<uint8> FileData;
-    std::ifstream file(TCHAR_TO_UTF8(*OnnxPath), std::ios::binary | std::ios::ate);
-    if (file)
-    {
-        std::ifstream::pos_type size = file.tellg();
-        FileData.SetNumUninitialized(size);
-        file.seekg(0, std::ios::beg);
-        file.read(reinterpret_cast<char*>(FileData.GetData()), size);
-        file.close();
-    }
+//    FString OnnxPath = FString([[NSBundle mainBundle] pathForResource:@"u2net" ofType:@"mlmodelc"]);
+//    TArray<uint8> FileData;
+//    std::ifstream file(TCHAR_TO_UTF8(*OnnxPath), std::ios::binary | std::ios::ate);
+//    if (file)
+//    {
+//        std::ifstream::pos_type size = file.tellg();
+//        FileData.SetNumUninitialized(size);
+//        file.seekg(0, std::ios::beg);
+//        file.read(reinterpret_cast<char*>(FileData.GetData()), size);
+//        file.close();
+//    }
 
     //Kishore
     // CoreML Model Path
@@ -246,11 +246,11 @@ bool AFurniLife::ReadFrame()
            static_cast<int>(frame.type()));
 
     
-    if (!frame.isContinuous() || frame.type() != CV_8UC4)
-    {
-        cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
-        frame = frame.clone();
-    }
+//    if (!frame.isContinuous() || frame.type() != CV_8UC4)
+//    {
+//        cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
+//        frame = frame.clone();
+//    }
 
 
     UE_LOG(LogTemp, Warning, TEXT("❗ Frame size = %d x %d, elemSize = %zu, step = %zu, isContinuous = %s"),
@@ -437,20 +437,20 @@ void AFurniLife::ApplySegmentationMask()
     cv::Mat mask(Height, Width, CV_32FC1, OutputBuffer.data());
     #endif
 
-#if PLATFORM_MAC
+//#if PLATFORM_MAC
     // ADD: Clamp to [0.0, 1.0]
     cv::Mat clamped;
     cv::threshold(mask, clamped, 1.0f, 1.0f, cv::THRESH_TRUNC);
 
     // Convert to 8-bit
     clamped.convertTo(alphaMask, CV_8UC1, 255.0);
-#endif
-    
-#if PLATFORM_IOS
-    cv::Mat normalized;
-    cv::normalize(mask, normalized, 0.0f, 1.0f, cv::NORM_MINMAX);  // Force into [0, 1]
-    normalized.convertTo(alphaMask, CV_8UC1, 255.0);
-#endif
+//#endif
+//    
+//#if PLATFORM_IOS
+//    cv::Mat normalized;
+//    cv::normalize(mask, normalized, 0.0f, 1.0f, cv::NORM_MINMAX);  // Force into [0, 1]
+//    normalized.convertTo(alphaMask, CV_8UC1, 255.0);
+//#endif
     
 
     // Resize
@@ -463,8 +463,9 @@ void AFurniLife::ApplySegmentationMask()
     }
     int cx = alphaMask.cols / 2;
     int cy = alphaMask.rows / 2;
-    uchar centerAlpha = alphaMask.at<uchar>(cy, cx);
-    UE_LOG(LogTemp, Warning, TEXT("[Alpha Debug] Centereeeerrrrrrrrrrr alpha: %d"), centerAlpha);
+//    uchar centerAlpha = alphaMask.at<uchar>(cy, cx);
+//    alphaMask.at<uchar>(cy, cx) = 255;
+//    UE_LOG(LogTemp, Warning, TEXT("[Alpha Debug] Centereeeerrrrrrrrrrr alpha: %d"), centerAlpha);
     for (int y = 0; y < frame.rows; ++y)
     {
         for (int x = 0; x < frame.cols; ++x)
