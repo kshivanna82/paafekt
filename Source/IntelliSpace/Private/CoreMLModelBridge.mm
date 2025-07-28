@@ -12,11 +12,84 @@
 #if PLATFORM_IOS
 #import <UIKit/UIKit.h>
 #endif
+#import <AVFoundation/AVFoundation.h>
+#import "FurniLife.h"
 
 #if PLATFORM_IOS
 // ---------------------------
-// 🔁 cv::Mat to UIImage Helper
+// 🔁 Global references
 // ---------------------------
+@interface CameraCaptureDelegate : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
+@end
+
+@implementation CameraCaptureDelegate
+
+- (void)captureOutput:(AVCaptureOutput*)output
+didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
+       fromConnection:(AVCaptureConnection*)connection
+{
+    CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+    if (!pixelBuffer) return;
+
+    CFRetain(pixelBuffer); // Retain it until processing is done
+
+//    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+////        std::vector<float> output;
+////        FCoreMLModelBridge* bridge = GetSharedBridge(); // Create or hold global bridge instance
+////        bridge->RunModel(pixelBuffer, output);
+//
+//        // Now call back to Unreal
+//        AsyncTask(ENamedThreads::GameThread, [pixelBuffer]() {
+//            if (AFurniLife::CurrentInstance)
+//                AFurniLife::CurrentInstance->OnCameraFrameFromPixelBuffer(pixelBuffer);
+//
+//            CFRelease(pixelBuffer); // Done
+//        });
+//    });
+}
+@end
+CameraCaptureDelegate* gDelegate = nil;
+AVCaptureSession* gSession = nil;
+
+// ---------------------------
+// 🔁 Start Native Camera
+// ---------------------------
+void StartNativeCamera()
+{
+    dispatch_async(dispatch_get_main_queue(), ^{
+        gSession = [[AVCaptureSession alloc] init];
+        gSession.sessionPreset = AVCaptureSessionPreset640x480;
+
+        AVCaptureDevice* device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
+        NSError* error = nil;
+        AVCaptureDeviceInput* input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&error];
+        if (error || ![gSession canAddInput:input]) {
+            NSLog(@"❌ Failed to add camera input: %@", error.localizedDescription);
+            return;
+        }
+        [gSession addInput:input];
+
+        AVCaptureVideoDataOutput* output = [[AVCaptureVideoDataOutput alloc] init];
+        output.videoSettings = @{ (__bridge NSString*)kCVPixelBufferPixelFormatTypeKey : @(kCVPixelFormatType_32BGRA) };
+        output.alwaysDiscardsLateVideoFrames = YES;
+
+        gDelegate = [[CameraCaptureDelegate alloc] init];
+        [output setSampleBufferDelegate:gDelegate queue:dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0)];
+
+        if ([gSession canAddOutput:output]) {
+            [gSession addOutput:output];
+        } else {
+            NSLog(@"❌ Cannot add AVCaptureVideoDataOutput");
+            return;
+        }
+
+        [gSession startRunning];
+        NSLog(@"📸 AVCaptureSession started");
+    });
+}
+
+
+
 UIImage* UIImageFromCVMat(const cv::Mat& mat)
 {
     CV_Assert(mat.isContinuous());
@@ -280,6 +353,15 @@ bool FCoreMLModelBridge::RunModel(CVPixelBufferRef PixelBuffer, std::vector<floa
         OutputData[i] = out[i].floatValue;
 
     return true;
+}
+
+extern "C" void StartCameraStreaming() {
+    StartNativeCamera();
+}
+
+FCoreMLModelBridge* GetSharedBridge() {
+    static FCoreMLModelBridge* Singleton = new FCoreMLModelBridge();
+    return Singleton;
 }
 
 #endif

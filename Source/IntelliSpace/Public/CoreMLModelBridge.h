@@ -10,11 +10,24 @@
 class U2NetRunner;
 #endif
 
+#ifdef __cplusplus
+    extern "C" {
+#endif
+
+        void StartCameraStreaming();
+        class FCoreMLModelBridge* GetSharedBridge();
+    
+
+#ifdef __cplusplus
+}
+#endif
+
 class FCoreMLModelBridge
 {
 public:
     FCoreMLModelBridge();
     ~FCoreMLModelBridge();
+
 
     bool LoadModel(const char* ModelPath);
     bool RunModel(const cv::Mat& InputImage, std::vector<float>& OutputData);

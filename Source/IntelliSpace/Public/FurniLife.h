@@ -31,9 +31,10 @@
 #include "NNERuntimeCPU.h"
 #include "NNEModelData.h"
 #endif
-//#if PLATFORM_IOS
+#if PLATFORM_IOS
+#include "CoreMLModelBridge.h"
 //#include <onnxruntime/core/session/onnxruntime_cxx_api.h>
-//#endif
+#endif
 
 #include "FurniLife.generated.h"
 
@@ -48,7 +49,7 @@ protected:
     virtual void BeginPlay() override;
 public:
     virtual void Tick(float DeltaTime) override;
-    virtual void BeginDestroy() override;
+//    virtual void BeginDestroy() override;
     UFUNCTION(BlueprintImplementableEvent, Category = Camera)
         void OnNextVideoFrame();
     UFUNCTION(BlueprintCallable, Category = Camera)
@@ -105,7 +106,8 @@ public:
         TArray<FColor> ColorData;
     
 
-
+    static AFurniLife* CurrentInstance;
+    void OnCameraFrameFromPixelBuffer(CVPixelBufferRef buffer);
 
     cv::VideoCapture cap;
     cv::Mat frame;

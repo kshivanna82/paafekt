@@ -13,10 +13,10 @@
 //#include <mutex>
 #import <UIKit/UIKit.h>
 #import "CoreMLModelBridge.h"
-FCoreMLModelBridge* CoreMLBridge = nullptr;
+//FCoreMLModelBridge* CoreMLBridge = nullptr;
 #endif
 
-
+AFurniLife* AFurniLife::CurrentInstance = nullptr;
 
 AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -33,9 +33,129 @@ AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(Obje
     VideoSize = FVector2D(1920, 1080);
     RefreshRate = 30.0f;
     #if PLATFORM_IOS
-    CoreMLBridge = nullptr;
+//    CoreMLBridge = nullptr;
     #endif
 }
+
+static void UpdateTextureRegions(UTexture2D* Texture, int32 MipIndex, uint32 NumRegions, FUpdateTextureRegion2D* Regions,
+                                 uint32 SrcPitch, uint32 SrcBpp, uint8* SrcData, bool bFreeData)
+{
+    if (Texture && Texture->GetResource())
+    {
+        struct FUpdateContext
+        {
+            UTexture2D* Tex;
+            int32 Mip;
+            FUpdateTextureRegion2D* Region;
+            const uint8* Data;
+            uint32 Pitch;
+            uint32 Bpp;
+            bool bFree;
+        };
+
+        FUpdateContext* Context = new FUpdateContext{Texture, MipIndex, Regions, SrcData, SrcPitch, SrcBpp, bFreeData};
+
+        ENQUEUE_RENDER_COMMAND(UpdateTextureRegionsData)(
+            [Context](FRHICommandListImmediate& RHICmdList)
+            {
+                FTexture2DResource* TexRes = static_cast<FTexture2DResource*>(Context->Tex->GetResource());
+#if PLATFORM_IOS
+                uint32 DestStride = 0;
+                void* TextureMemory = RHICmdList.LockTexture2D(
+                    TexRes->GetTexture2DRHI(),
+                    Context->Mip,
+                    RLM_WriteOnly,
+                    DestStride,
+                    false);
+
+                const uint32 WidthInBytes = Context->Region->Width * Context->Bpp;
+                for (uint32 y = 0; y < Context->Region->Height; ++y)
+                {
+                    uint8* DestRow = static_cast<uint8*>(TextureMemory) + y * DestStride;
+                    const uint8* SrcRow = Context->Data + y * Context->Pitch;
+                    FMemory::Memcpy(DestRow, SrcRow, WidthInBytes);
+//                    for (int32 Row = 0; Row < Region.Height; ++Row)
+//                    {
+//                        FMemory::Memcpy(
+//                            reinterpret_cast<uint8*>(DestData) + Row * DestStride,
+//                            SrcData + Row * RowPitch,
+//                            RowPitch
+//                        );
+//                    }
+
+                }
+
+                RHICmdList.UnlockTexture2D(TexRes->GetTexture2DRHI(), Context->Mip, false);
+                RHIFlushResources();
+#else
+                RHIUpdateTexture2D(
+                    TexRes->GetTexture2DRHI(),
+                    Context->Mip,
+                    *Context->Region,
+                    Context->Pitch,
+                    Context->Data);
+#endif
+                if (Context->bFree)
+                {
+                    FMemory::Free(const_cast<uint8*>(Context->Data));
+
+                }
+                delete Context;
+            });
+    }
+}
+
+//static void UpdateTextureRegions(
+//    UTexture2D* Texture,
+//    int32 MipIndex,
+//    uint32 NumRegions,
+//    FUpdateTextureRegion2D* Regions,
+//    uint32 SrcPitch,
+//    uint32 SrcBpp,
+//    const uint8* SrcData,
+//    bool bFreeData)
+//{
+//    if (!Texture || !Texture->GetResource() || NumRegions == 0 || !Regions)
+//        return;
+//
+//    struct FUpdateTextureContext
+//    {
+//        FTexture2DResource* Texture2DResource;
+//        int32 Mip;
+//        FUpdateTextureRegion2D Region;
+//        uint32 Pitch;
+//        uint32 Bpp;
+//        const uint8* Data;
+//    };
+//
+//    FUpdateTextureContext* Context = new FUpdateTextureContext;
+//    Context->Texture2DResource = static_cast<FTexture2DResource*>(Texture->GetResource());
+//    Context->Mip = MipIndex;
+//    Context->Region = *Regions;
+//    Context->Pitch = SrcPitch;
+//    Context->Bpp = SrcBpp;
+//    Context->Data = SrcData;
+//
+//    ENQUEUE_RENDER_COMMAND(UpdateTextureRegionsData)(
+//        [Context, bFreeData](FRHICommandListImmediate& RHICmdList)
+//        {
+//            RHIUpdateTexture2D(
+//                Context->Texture2DResource->GetTexture2DRHI(),
+//                Context->Mip,
+//                Context->Region,
+//                Context->Pitch,
+//                Context->Data
+//            );
+//
+//            if (bFreeData)
+//            {
+//                // Safe only if SrcData was not const originally
+//                FMemory::Free(const_cast<uint8*>(Context->Data));
+//            }
+//
+//            delete Context;
+//        });
+//}
 
 static void UpdateTextureRegions(
     UTexture2D* Texture,
@@ -48,6 +168,54 @@ static void UpdateTextureRegions(
     bool bFreeData = false
 );
 
+//static void UpdateTextureRegions(
+//    UTexture2D* Texture,
+//    int32 MipIndex,
+//    uint32 NumRegions,
+//    FUpdateTextureRegion2D* Regions,
+//    uint32 SrcPitch,
+//    uint32 SrcBpp,
+//    uint8* SrcData,
+//    bool bFreeData)
+//{
+//    if (!Texture || !Texture->GetResource()) return;
+//
+//    FTexture2DResource* TextureResource = static_cast<FTexture2DResource*>(Texture->GetResource());
+//    if (!TextureResource) return;
+//
+//    ENQUEUE_RENDER_COMMAND(UpdateTextureRegionsCmd)(
+//        [TextureResource, Regions, MipIndex, NumRegions, SrcPitch, SrcBpp, SrcData, bFreeData](FRHICommandListImmediate& RHICmdList)
+//        {
+//            for (uint32 RegionIndex = 0; RegionIndex < NumRegions; ++RegionIndex)
+//            {
+//                const FUpdateTextureRegion2D& Region = Regions[RegionIndex];
+//
+//                uint32 DestStride = 0;
+//                uint8* DestData = reinterpret_cast<uint8*>(RHICmdList.LockTexture2D(
+//                    TextureResource->GetTexture2DRHI(), MipIndex, RLM_WriteOnly, DestStride, false));
+//
+//                for (int32 Y = 0; Y < Region.Height; ++Y)
+//                {
+//                    FMemory::Memcpy(
+//                        DestData + (Region.DestY + Y) * DestStride + Region.DestX * SrcBpp,
+//                        SrcData + (Region.SrcY + Y) * SrcPitch + Region.SrcX * SrcBpp,
+//                        Region.Width * SrcBpp);
+//                }
+//
+//                RHICmdList.UnlockTexture2D(TextureResource->GetTexture2DRHI(), MipIndex, false);
+//            }
+//
+//            if (bFreeData)
+//            {
+//                FMemory::Free(SrcData);
+//            }
+//        });
+//}
+
+
+
+
+
 void AFurniLife::BeginPlay()
 {
     
@@ -57,12 +225,13 @@ void AFurniLife::BeginPlay()
     Super::BeginPlay();
     UE_LOG(LogTemp, Warning, TEXT("Returned from Super::BeginPlay()"));
 
-
+    AFurniLife::CurrentInstance = this;
     cap.open(CameraID);
     if (!cap.isOpened()) {
         UE_LOG(LogTemp, Error, TEXT("Failed to open camera"));
         return;
     }
+    cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
     isStreamOpen = true;
 
     ColorData.SetNumUninitialized(VideoSize.X * VideoSize.Y);
@@ -74,31 +243,17 @@ void AFurniLife::BeginPlay()
 #if WITH_EDITORONLY_DATA
     Camera_Texture2D->MipGenSettings = TMGS_NoMipmaps;
 #endif
-    Camera_Texture2D->LODGroup = TEXTUREGROUP_UI;
-    Camera_Texture2D->CompressionSettings = TC_Default;
-//    Camera_Texture2D->SRGB = Camera_RenderTarget->SRGB;
-    Camera_Texture2D->NeverStream = true;
-    Camera_Texture2D->SRGB = false;
+//    Camera_Texture2D->LODGroup = TEXTUREGROUP_UI;
+//    Camera_Texture2D->CompressionSettings = TC_Default;
+    Camera_Texture2D->SRGB = Camera_RenderTarget->SRGB;
+//    Camera_Texture2D->NeverStream = true;
+//    Camera_Texture2D->SRGB = false;
     VideoMask_Texture2D->SRGB = false;
     Camera_Texture2D->UpdateResource();
 
 #if PLATFORM_IOS
-    
-    
-    
-    
-//    FString OnnxPath = FString([[NSBundle mainBundle] pathForResource:@"u2net" ofType:@"mlmodelc"]);
-//    TArray<uint8> FileData;
-//    std::ifstream file(TCHAR_TO_UTF8(*OnnxPath), std::ios::binary | std::ios::ate);
-//    if (file)
-//    {
-//        std::ifstream::pos_type size = file.tellg();
-//        FileData.SetNumUninitialized(size);
-//        file.seekg(0, std::ios::beg);
-//        file.read(reinterpret_cast<char*>(FileData.GetData()), size);
-//        file.close();
-//    }
-
+    StartCameraStreaming();
+//    StartCameraStreaming();
     //Kishore
     // CoreML Model Path
     NSString* ModelPath = [[NSBundle mainBundle] pathForResource:@"u2net" ofType:@"mlmodelc"];
@@ -107,8 +262,9 @@ void AFurniLife::BeginPlay()
         return;
     }
 
-    CoreMLBridge = new FCoreMLModelBridge();
-    if (!CoreMLBridge->LoadModel([ModelPath UTF8String])) {
+//    CoreMLBridge = new FCoreMLModelBridge();
+    if (!GetSharedBridge()->LoadModel([ModelPath UTF8String])) {
+//    if (!CoreMLBridge->LoadModel([ModelPath UTF8String])) {
         UE_LOG(LogTemp, Error, TEXT("❌ Failed to load CoreML model."));
         return;
     }
@@ -134,9 +290,26 @@ void AFurniLife::BeginPlay()
 #endif
 }
 
+
+
+
 void AFurniLife::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+    if (!cap.isOpened())
+    {
+        cap.open(CameraID);
+        UE_LOG(LogTemp, Warning, TEXT("📷 OpenCV VideoCapture was closed. Reopening."));
+    }
+    static int TickCount = 0;
+    if (TickCount++ % 30 == 0)  // Every 60 frames (~2 sec at 30fps)
+    {
+        cap.release();
+        cap.open(CameraID);
+    }
+    UE_LOG(LogTemp, Warning, TEXT("Camera IDDDDDDDDDD: %d "),
+           CameraID);
+////#if PLATFORM_MAC
     RefreshTimer += DeltaTime;
     if (isStreamOpen && RefreshTimer >= 1.0f / RefreshRate)
     {
@@ -147,6 +320,124 @@ void AFurniLife::Tick(float DeltaTime)
             }
         });
     }
+////#endif
+}
+
+
+
+void AFurniLife::OnCameraFrameFromPixelBuffer(CVPixelBufferRef buffer)
+{
+//    static int TickCount = 0;
+//    if (TickCount++ % 90 == 0)  // Every 60 frames (~2 sec at 30fps)
+//    {
+//        cap.release();
+//        cap.open(CameraID);
+//    }
+    // Convert to cv::Mat
+    CVPixelBufferLockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly);
+    int width = CVPixelBufferGetWidth(buffer);
+    int height = CVPixelBufferGetHeight(buffer);
+    uint8_t* base = (uint8_t*)CVPixelBufferGetBaseAddress(buffer);
+    size_t stride = CVPixelBufferGetBytesPerRow(buffer);
+
+    cv::Mat mat(height, width, CV_8UC4, base, stride);
+    frame = mat.clone();
+    CVPixelBufferUnlockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly);
+
+    ProcessInputForModel();
+//    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        
+        RunModelInference();  // Already calls bridge->RunModel(PixelBuffer)
+        ApplySegmentationMask();
+        // Convert to BGRA (for Unreal)
+        cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
+        
+        
+        // Log top-left and bottom-right pixel (after alpha applied)
+        cv::Vec4b topLeft = frame.at<cv::Vec4b>(0, 0);
+        cv::Vec4b bottomRight = frame.at<cv::Vec4b>(frame.rows - 1, frame.cols - 1);
+        
+        UE_LOG(LogTemp, Warning, TEXT("[Pixel Debug] Top-Lefttttttt (BGRA): %d %d %d %d"),
+               topLeft[0], topLeft[1], topLeft[2], topLeft[3]);
+        UE_LOG(LogTemp, Warning, TEXT("[Pixel Debug] Bottom-Rightttttttt (BGRA): %d %d %d %d"),
+               bottomRight[0], bottomRight[1], bottomRight[2], bottomRight[3]);
+        
+        
+        
+        
+        // Print center pixel for debug
+        int cx = frame.cols / 2;
+        int cy = frame.rows / 2;
+        cv::Vec4b center = frame.at<cv::Vec4b>(cy, cx);
+        UE_LOG(LogTemp, Warning, TEXT("[Pixel Debug] Center (BGRA): %d %d %d %d"), center[0], center[1], center[2], center[3]);
+        
+        
+        
+        int Width = frame.cols;
+        int Height = frame.rows;
+        VideoSize = FVector2D(Width, Height);  // Update VideoSize safely
+        
+        ColorData.SetNumUninitialized(Width * Height);
+        
+        for (int y = 0; y < Height; ++y)
+        {
+            for (int x = 0; x < Width; ++x)
+            {
+                cv::Vec4b& srcPixel = frame.at<cv::Vec4b>(y, x);
+                int index = y * Width + x;
+                //            ColorData.SetNum(Width * Height, EAllowShrinking::No);
+                
+                ColorData[index] = FColor(srcPixel[2], srcPixel[1], srcPixel[0], srcPixel[3]);
+                //            ColorData[index] = FColor(255, 0, 0, 255);  // Solid opaque red
+            }
+        }
+        int32 SrcPitch = static_cast<int32>(VideoSize.X * sizeof(FColor));
+        UE_LOG(LogTemp, Warning, TEXT("SrcPitchjkfjgkfjgkgjhkjhkj = %d"), SrcPitch);
+        
+        UE_LOG(LogTemp, Warning, TEXT("frame step = %llu, cols = %d, elemSize = %d"),
+               static_cast<uint64>(frame.step), frame.cols, frame.elemSize());
+        
+        UE_LOG(LogTemp, Warning, TEXT("frame size = %d x %d, isContinuous = %s, type = %d"),
+               frame.cols, frame.rows,
+               frame.isContinuous() ? TEXT("true") : TEXT("false"),
+               static_cast<int>(frame.type()));
+        
+        
+        //    if (!frame.isContinuous() || frame.type() != CV_8UC4)
+        //    {
+        //        cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
+        //        frame = frame.clone();
+        //    }
+        
+        
+        UE_LOG(LogTemp, Warning, TEXT("❗ Frame size = %d x %d, elemSize = %zu, step = %zu, isContinuous = %s"),
+               frame.cols, frame.rows, frame.elemSize(), frame.step[0], frame.isContinuous() ? TEXT("true") : TEXT("false"));
+        
+        UE_LOG(LogTemp, Warning, TEXT("🧵 About to update texture with BGRA frame 111111..."));
+        
+        TArray<FColor> LocalCopy = ColorData;
+        FVector2D LocalSize = VideoSize;
+        
+        
+        UE_LOG(LogTemp, Warning, TEXT("📍 GameThread check: %d"), IsInGameThread());
+        
+//        AsyncTask(ENamedThreads::GameThread, [=]() {
+            if (!Camera_Texture2D) return;
+            static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
+            UpdateTextureRegions(
+                                 Camera_Texture2D,
+                                 0,
+                                 1,
+                                 &Region,
+                                 LocalSize.X * sizeof(FColor),
+                                 //                         SrcPitch,
+                                 sizeof(FColor),
+                                 reinterpret_cast<uint8*>(ColorData.GetData()),
+                                 false
+                                 );
+//        });
+//    });
+    return;
 }
 
 bool AFurniLife::ReadFrame()
@@ -154,6 +445,23 @@ bool AFurniLife::ReadFrame()
     if (!Camera_Texture2D || !cap.isOpened())
         return false;
     cap.read(frame);
+    
+//    static cv::Mat prev;
+//
+//    if (!prev.empty() && frame.size() == prev.size() && frame.type() == prev.type())
+//    {
+//        cv::Mat diff;
+//        cv::absdiff(frame, prev, diff);
+//        cv::Scalar channelSum = cv::sum(diff);
+//        double diffSum = channelSum[0] + channelSum[1] + channelSum[2] + channelSum[3];
+//
+//        UE_LOG(LogTemp, Warning, TEXT("🧪 Frame diff sum = %.2f (B:%.2f, G:%.2f, R:%.2f, A:%.2f)"),
+//               diffSum, channelSum[0], channelSum[1], channelSum[2], channelSum[3]);
+//    }
+//    frame.copyTo(prev);
+
+
+    
     if (frame.empty())
     {
         UE_LOG(LogTemp, Warning, TEXT("Camera frame is empty"));
@@ -162,36 +470,6 @@ bool AFurniLife::ReadFrame()
      
     VideoSize = FVector2D(frame.cols, frame.rows);
     
-    // Update texture if resolution has changed
-//    if (ImagePlatePost)
-//    {
-//        if (!BaseMaterial)
-//        {
-//            UE_LOG(LogTemp, Error, TEXT("❌ BaseMaterial is null at runtime."));
-//            return false;
-//        }
-//
-//        if (!Camera_Texture2D)
-//        {
-//            UE_LOG(LogTemp, Error, TEXT("❌ Camera_Texture2D is null — cannot bind to material."));
-//            return false;
-//        }
-//
-//        UMaterialInstanceDynamic* DynMat = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-//        if (!DynMat)
-//        {
-//            UE_LOG(LogTemp, Error, TEXT("❌ Failed to create dynamic material instance."));
-//            return false;
-//        }
-//
-//        DynMat->SetTextureParameterValue(FName("Texture"), Camera_Texture2D);
-//        ImagePlatePost->SetMaterial(0, DynMat);
-//        UE_LOG(LogTemp, Warning, TEXT("✅ Material bound successfully with Camera_Texture2D %s"), *Camera_Texture2D->GetName());
-//    }
-
-
-    
-
     
     ProcessInputForModel();
 
@@ -256,7 +534,7 @@ bool AFurniLife::ReadFrame()
     UE_LOG(LogTemp, Warning, TEXT("❗ Frame size = %d x %d, elemSize = %zu, step = %zu, isContinuous = %s"),
            frame.cols, frame.rows, frame.elemSize(), frame.step[0], frame.isContinuous() ? TEXT("true") : TEXT("false"));
 
-    UE_LOG(LogTemp, Warning, TEXT("🧵 About to update texture with BGRA frame..."));
+    UE_LOG(LogTemp, Warning, TEXT("🧵 About to update texture with BGRA frame 22222..."));
 
     
 
@@ -266,13 +544,13 @@ bool AFurniLife::ReadFrame()
         0,
         1,
         &Region,
-//        VideoSize.X * sizeof(FColor),
-                         SrcPitch,
+        VideoSize.X * sizeof(FColor),
+//                         SrcPitch,
         sizeof(FColor),
         reinterpret_cast<uint8*>(ColorData.GetData()),
         false
     );
-    return true;
+    return false;
 }
 
 void AFurniLife::ProcessInputForModel()
@@ -283,17 +561,18 @@ void AFurniLife::ProcessInputForModel()
 
 }
 
-void AFurniLife::BeginDestroy()
-{
-#if PLATFORM_IOS
-    if (CoreMLBridge)
-    {
-        delete CoreMLBridge;
-        CoreMLBridge = nullptr;
-    }
-#endif
-    Super::BeginDestroy();
-}
+//void AFurniLife::BeginDestroy()
+//{
+//#if PLATFORM_IOS
+////    if (CoreMLBridge)
+////    {
+////        delete CoreMLBridge;
+////        CoreMLBridge = nullptr;
+////    }
+//#endif
+//    AFurniLife::CurrentInstance = nullptr;
+//    Super::BeginDestroy();
+//}
 
 
 void AFurniLife::RunModelInference()
@@ -338,6 +617,30 @@ void AFurniLife::RunModelInference()
     const int srcStride = resized.step[0];
     const int srcCols = resized.cols;
     const int srcRows = resized.rows;
+//kishore
+    if (resized.channels() != 4)
+    {
+        UE_LOG(LogTemp, Log, TEXT("❌ ddddddfdd is  not 4"));
+        UE_LOG(LogTemp, Log, TEXT("❌ ddddddfdd is not 4"));
+        UE_LOG(LogTemp, Log, TEXT("❌ ddddddfdd is not 4"));
+        cv::cvtColor(resized, resized, cv::COLOR_BGR2BGRA);
+    }
+    if (resized.empty()) {
+        UE_LOG(LogTemp, Log, TEXT("❌ resized666666 is empty"));
+        UE_LOG(LogTemp, Log, TEXT("❌ resized666666 is empty"));
+        UE_LOG(LogTemp, Log, TEXT("❌ resized666666 is empty"));
+        return;
+    }
+
+
+    if (resized.empty() || resized.type() != CV_8UC4) {
+        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
+        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
+        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
+        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
+        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
+//        return;
+    }
 
     for (int y = 0; y < srcRows; ++y)
     {
@@ -357,7 +660,8 @@ void AFurniLife::RunModelInference()
     CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
 
     std::vector<float> OutputData;
-    if (!CoreMLBridge || !CoreMLBridge->RunModel(pixelBuffer, OutputData)) {
+    if (!GetSharedBridge() || !GetSharedBridge()->RunModel(pixelBuffer, OutputData)) {
+//    if (!CoreMLBridge || !CoreMLBridge->RunModel(pixelBuffer, OutputData)) {
         UE_LOG(LogTemp, Error, TEXT("❌ CoreML inference failed."));
         CVPixelBufferRelease(pixelBuffer);
         return;
@@ -473,8 +777,19 @@ void AFurniLife::ApplySegmentationMask()
             uchar alpha = alphaMask.at<uchar>(y, x);
             cv::Vec4b& px = frame.at<cv::Vec4b>(y, x);
 //            px[3] = (alpha < 64) ? 0 : alpha;
-            px[3] = alpha;
+//            px[3] = alpha;
 //            px[3] = 255;
+            if (alpha < 64)  // Background
+            {
+                px[0] = 0;     // B
+                px[1] = 255;   // G
+                px[2] = 0;     // R
+                px[3] = 255;   // Full alpha (opaque)
+            }
+            else  // Foreground
+            {
+                px[3] = 255;  // Ensure fully opaque
+            }
         }
     }
     double minVal, maxVal;
@@ -483,60 +798,5 @@ void AFurniLife::ApplySegmentationMask()
 
 }
 
-static void UpdateTextureRegions(UTexture2D* Texture, int32 MipIndex, uint32 NumRegions, FUpdateTextureRegion2D* Regions,
-                                 uint32 SrcPitch, uint32 SrcBpp, uint8* SrcData, bool bFreeData)
-{
-    if (Texture && Texture->GetResource())
-    {
-        struct FUpdateContext
-        {
-            UTexture2D* Tex;
-            int32 Mip;
-            FUpdateTextureRegion2D* Region;
-            uint8* Data;
-            uint32 Pitch;
-            uint32 Bpp;
-            bool bFree;
-        };
 
-        FUpdateContext* Context = new FUpdateContext{Texture, MipIndex, Regions, SrcData, SrcPitch, SrcBpp, bFreeData};
-
-        ENQUEUE_RENDER_COMMAND(UpdateTextureRegionsData)(
-            [Context](FRHICommandListImmediate& RHICmdList)
-            {
-                FTexture2DResource* TexRes = static_cast<FTexture2DResource*>(Context->Tex->GetResource());
-#if PLATFORM_IOS
-                uint32 DestStride = 0;
-                void* TextureMemory = RHICmdList.LockTexture2D(
-                    TexRes->GetTexture2DRHI(),
-                    Context->Mip,
-                    RLM_WriteOnly,
-                    DestStride,
-                    false);
-
-                const uint32 WidthInBytes = Context->Region->Width * Context->Bpp;
-                for (uint32 y = 0; y < Context->Region->Height; ++y)
-                {
-                    uint8* DestRow = static_cast<uint8*>(TextureMemory) + y * DestStride;
-                    const uint8* SrcRow = Context->Data + y * Context->Pitch;
-                    FMemory::Memcpy(DestRow, SrcRow, WidthInBytes);
-                }
-
-                RHICmdList.UnlockTexture2D(TexRes->GetTexture2DRHI(), Context->Mip, false);
-#else
-                RHIUpdateTexture2D(
-                    TexRes->GetTexture2DRHI(),
-                    Context->Mip,
-                    *Context->Region,
-                    Context->Pitch,
-                    Context->Data);
-#endif
-                if (Context->bFree)
-                {
-                    FMemory::Free(Context->Data);
-                }
-                delete Context;
-            });
-    }
-}
 
