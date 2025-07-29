@@ -15,8 +15,17 @@
 #import "CoreMLModelBridge.h"
 //FCoreMLModelBridge* CoreMLBridge = nullptr;
 #endif
+#include "GameFramework/PlayerStart.h"
+#include "EngineUtils.h"  // For TActorIterator
+
 
 AFurniLife* AFurniLife::CurrentInstance = nullptr;
+//cv::VideoCapture cap;
+//cv::Mat frame;
+//cv::Mat resized;
+//cv::Mat alphaMask;
+//cv::Size cvSize;
+//cv::Mat cvMat;
 
 AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -25,6 +34,15 @@ AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(Obje
     rootComp = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
     ImagePlateRaw = CreateDefaultSubobject<UImagePlateComponent>(TEXT("ImagePlateRaw"));
     ImagePlatePost = CreateDefaultSubobject<UImagePlateComponent>(TEXT("ImagePlatePost"));
+//    ImagePlatePost->SetupAttachment(rootComp);
+//    ImagePlatePost->SetRelativeLocation(FVector(-245.0f, 395.0f, 226.0f));  // Tune this
+//    ImagePlatePost->SetRelativeRotation(FRotator(-4.0f, -11.0f, -51.0f));
+//    ImagePlatePost->SetRelativeScale3D(FVector(1.0f, 200.0f, 200.0f));
+    
+    // Get PlayerStart transform
+    
+
+
     Brightness = 0;
     Multiply = 1;
     CameraID = 0;
@@ -105,57 +123,6 @@ static void UpdateTextureRegions(UTexture2D* Texture, int32 MipIndex, uint32 Num
     }
 }
 
-//static void UpdateTextureRegions(
-//    UTexture2D* Texture,
-//    int32 MipIndex,
-//    uint32 NumRegions,
-//    FUpdateTextureRegion2D* Regions,
-//    uint32 SrcPitch,
-//    uint32 SrcBpp,
-//    const uint8* SrcData,
-//    bool bFreeData)
-//{
-//    if (!Texture || !Texture->GetResource() || NumRegions == 0 || !Regions)
-//        return;
-//
-//    struct FUpdateTextureContext
-//    {
-//        FTexture2DResource* Texture2DResource;
-//        int32 Mip;
-//        FUpdateTextureRegion2D Region;
-//        uint32 Pitch;
-//        uint32 Bpp;
-//        const uint8* Data;
-//    };
-//
-//    FUpdateTextureContext* Context = new FUpdateTextureContext;
-//    Context->Texture2DResource = static_cast<FTexture2DResource*>(Texture->GetResource());
-//    Context->Mip = MipIndex;
-//    Context->Region = *Regions;
-//    Context->Pitch = SrcPitch;
-//    Context->Bpp = SrcBpp;
-//    Context->Data = SrcData;
-//
-//    ENQUEUE_RENDER_COMMAND(UpdateTextureRegionsData)(
-//        [Context, bFreeData](FRHICommandListImmediate& RHICmdList)
-//        {
-//            RHIUpdateTexture2D(
-//                Context->Texture2DResource->GetTexture2DRHI(),
-//                Context->Mip,
-//                Context->Region,
-//                Context->Pitch,
-//                Context->Data
-//            );
-//
-//            if (bFreeData)
-//            {
-//                // Safe only if SrcData was not const originally
-//                FMemory::Free(const_cast<uint8*>(Context->Data));
-//            }
-//
-//            delete Context;
-//        });
-//}
 
 static void UpdateTextureRegions(
     UTexture2D* Texture,
@@ -168,60 +135,8 @@ static void UpdateTextureRegions(
     bool bFreeData = false
 );
 
-//static void UpdateTextureRegions(
-//    UTexture2D* Texture,
-//    int32 MipIndex,
-//    uint32 NumRegions,
-//    FUpdateTextureRegion2D* Regions,
-//    uint32 SrcPitch,
-//    uint32 SrcBpp,
-//    uint8* SrcData,
-//    bool bFreeData)
-//{
-//    if (!Texture || !Texture->GetResource()) return;
-//
-//    FTexture2DResource* TextureResource = static_cast<FTexture2DResource*>(Texture->GetResource());
-//    if (!TextureResource) return;
-//
-//    ENQUEUE_RENDER_COMMAND(UpdateTextureRegionsCmd)(
-//        [TextureResource, Regions, MipIndex, NumRegions, SrcPitch, SrcBpp, SrcData, bFreeData](FRHICommandListImmediate& RHICmdList)
-//        {
-//            for (uint32 RegionIndex = 0; RegionIndex < NumRegions; ++RegionIndex)
-//            {
-//                const FUpdateTextureRegion2D& Region = Regions[RegionIndex];
-//
-//                uint32 DestStride = 0;
-//                uint8* DestData = reinterpret_cast<uint8*>(RHICmdList.LockTexture2D(
-//                    TextureResource->GetTexture2DRHI(), MipIndex, RLM_WriteOnly, DestStride, false));
-//
-//                for (int32 Y = 0; Y < Region.Height; ++Y)
-//                {
-//                    FMemory::Memcpy(
-//                        DestData + (Region.DestY + Y) * DestStride + Region.DestX * SrcBpp,
-//                        SrcData + (Region.SrcY + Y) * SrcPitch + Region.SrcX * SrcBpp,
-//                        Region.Width * SrcBpp);
-//                }
-//
-//                RHICmdList.UnlockTexture2D(TextureResource->GetTexture2DRHI(), MipIndex, false);
-//            }
-//
-//            if (bFreeData)
-//            {
-//                FMemory::Free(SrcData);
-//            }
-//        });
-//}
-
-
-
-
-
 void AFurniLife::BeginPlay()
 {
-    
-//    UE_LOG(LogTemp, Warning, TEXT("FurniLife::BeginPlay (before Super) this=%p"), this);
-//    UE_LOG(LogTemp, Warning, TEXT("rootComp=%p, ImagePlateRaw=%p, ImagePlatePost=%p"), rootComp, ImagePlateRaw, ImagePlatePost);
-
     Super::BeginPlay();
     UE_LOG(LogTemp, Warning, TEXT("Returned from Super::BeginPlay()"));
 
@@ -250,9 +165,31 @@ void AFurniLife::BeginPlay()
 //    Camera_Texture2D->SRGB = false;
     VideoMask_Texture2D->SRGB = false;
     Camera_Texture2D->UpdateResource();
+    
+    APlayerStart* PlayerStart = nullptr;
+    for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
+    {
+        PlayerStart = *It;
+        break;
+    }
+
+//    if (PlayerStart)
+//    {
+//        FVector ForwardOffset = PlayerStart->GetActorForwardVector() * 200.0f;  // 200 units in front
+//        FVector PlacementLocation = PlayerStart->GetActorLocation() + ForwardOffset + FVector(0, 0, 100);  // Add height if needed
+//        FRotator PlacementRotation = PlayerStart->GetActorRotation();  // Match player's facing direction
+//
+//        if (!ImagePlatePost)
+//        {
+//            UE_LOG(LogTemp, Error, TEXT("❌ ImagePlatePost is null!"));
+//            return;
+//        }
+//
+//        ImagePlatePost->SetWorldLocation(PlacementLocation);
+//        ImagePlatePost->SetWorldRotation(PlacementRotation);
+//    }
 
 #if PLATFORM_IOS
-    StartCameraStreaming();
 //    StartCameraStreaming();
     //Kishore
     // CoreML Model Path
@@ -291,37 +228,124 @@ void AFurniLife::BeginPlay()
 }
 
 
+//static double LastProcessTime = 0;
+
+static double LastProcessTime = 0;
+static double LastCameraCheckTime = 0;
 
 
 void AFurniLife::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
-    if (!cap.isOpened())
+    double CurrentTime = GetWorld()->TimeSeconds;
+
+    // 🕒 1. Reopen camera every ~3 seconds
+    if (CurrentTime - LastCameraCheckTime >= 3.0)
     {
-        cap.open(CameraID);
-        UE_LOG(LogTemp, Warning, TEXT("📷 OpenCV VideoCapture was closed. Reopening."));
-    }
-    static int TickCount = 0;
-    if (TickCount++ % 30 == 0)  // Every 60 frames (~2 sec at 30fps)
-    {
+        LastCameraCheckTime = CurrentTime;
         cap.release();
         cap.open(CameraID);
+        UE_LOG(LogTemp, Warning, TEXT("🔁 Periodic camera reopen triggered."));
     }
-    UE_LOG(LogTemp, Warning, TEXT("Camera IDDDDDDDDDD: %d "),
-           CameraID);
-////#if PLATFORM_MAC
-    RefreshTimer += DeltaTime;
-    if (isStreamOpen && RefreshTimer >= 1.0f / RefreshRate)
+
+    // 🖼️ 2. Throttle frame processing using RefreshRate
+    if (isStreamOpen && (CurrentTime - LastProcessTime) >= (1.0 / RefreshRate))
     {
-        RefreshTimer = 0.0f;
+        LastProcessTime = CurrentTime;
+
+        if (!cap.isOpened())
+        {
+            cap.release();
+            cap.open(CameraID);
+            UE_LOG(LogTemp, Warning, TEXT("📷 OpenCV VideoCapture was closed. Reopening."));
+        }
+
         AsyncTask(ENamedThreads::GameThread, [this]() {
             if (ReadFrame()) {
                 GetWorld()->GetTimerManager().SetTimerForNextTick(this, &AFurniLife::OnNextVideoFrame);
             }
         });
     }
+
+    
+    
+//    if (!cap.isOpened())
+//    {
+//        cap.release();
+//        cap.open(CameraID);
+//        UE_LOG(LogTemp, Warning, TEXT("📷 OpenCV VideoCapture was closed. Reopening."));
+//    }
+//    static int TickCount = 0;
+//    if (TickCount++ % 90 == 0)  // Every 60 frames (~2 sec at 30fps)
+//    {
+//        cap.release();
+//        cap.open(CameraID);
+//    }
+//    UE_LOG(LogTemp, Warning, TEXT("Camera IDDDDDDDDDD: %d "),
+//           CameraID);
+////#if PLATFORM_MAC
+    ///
+    ///
+//    RefreshTimer += DeltaTime;
+//    if (isStreamOpen && RefreshTimer >= 1.0f / RefreshRate)
+//    {
+//        RefreshTimer = 0.0f;
+//        AsyncTask(ENamedThreads::GameThread, [this]() {
+//            if (ReadFrame()) {
+//                GetWorld()->GetTimerManager().SetTimerForNextTick(this, &AFurniLife::OnNextVideoFrame);
+//            }
+//        });
+//    }
+    
+    
+//    double CurrentTime = GetWorld()->TimeSeconds;
+//
+//    if (isStreamOpen && (CurrentTime - LastProcessTime) >= (1.0 / RefreshRate))
+//    {
+//        LastProcessTime = CurrentTime;
+//        if (!cap.isOpened())
+//        {
+//            cap.release();
+//            cap.open(CameraID);
+//            UE_LOG(LogTemp, Warning, TEXT("📷 OpenCV VideoCapture was closed. Reopening."));
+//        }
+
+        AsyncTask(ENamedThreads::GameThread, [this]() {
+            if (ReadFrame()) {
+                GetWorld()->GetTimerManager().SetTimerForNextTick(this, &AFurniLife::OnNextVideoFrame);
+            }
+        });
+//    }
+
+    
 ////#endif
 }
+
+void AFurniLife::OnNextVideoFrame()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🎞️ OnNextVideoFrame called"));
+
+    // Apply mask, convert to BGRA, update texture
+    ApplySegmentationMask();
+
+    // If using OpenCV frame → update texture
+    cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
+
+    if (!Camera_Texture2D) return;
+    static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
+    UpdateTextureRegions(
+                         Camera_Texture2D,
+                         0,
+                         1,
+                         &Region,
+                         VideoSize.X * sizeof(FColor),
+                         //                         SrcPitch,
+                         sizeof(FColor),
+                         reinterpret_cast<uint8*>(ColorData.GetData()),
+                         false
+                         );
+}
+
 
 
 
@@ -418,6 +442,8 @@ void AFurniLife::OnCameraFrameFromPixelBuffer(CVPixelBufferRef buffer)
         TArray<FColor> LocalCopy = ColorData;
         FVector2D LocalSize = VideoSize;
         
+//        cv::rotate(frame, frame, cv::ROTATE_90_COUNTERCLOCKWISE); // or ROTATE_90_COUNTERCLOCKWISE
+
         
         UE_LOG(LogTemp, Warning, TEXT("📍 GameThread check: %d"), IsInGameThread());
         
@@ -446,28 +472,14 @@ bool AFurniLife::ReadFrame()
         return false;
     cap.read(frame);
     
-//    static cv::Mat prev;
-//
-//    if (!prev.empty() && frame.size() == prev.size() && frame.type() == prev.type())
-//    {
-//        cv::Mat diff;
-//        cv::absdiff(frame, prev, diff);
-//        cv::Scalar channelSum = cv::sum(diff);
-//        double diffSum = channelSum[0] + channelSum[1] + channelSum[2] + channelSum[3];
-//
-//        UE_LOG(LogTemp, Warning, TEXT("🧪 Frame diff sum = %.2f (B:%.2f, G:%.2f, R:%.2f, A:%.2f)"),
-//               diffSum, channelSum[0], channelSum[1], channelSum[2], channelSum[3]);
-//    }
-//    frame.copyTo(prev);
-
-
-    
     if (frame.empty())
     {
         UE_LOG(LogTemp, Warning, TEXT("Camera frame is empty"));
         return false;
     }
-     
+    
+    cv::rotate(frame, frame, cv::ROTATE_90_COUNTERCLOCKWISE);  // or try COUNTERCLOCKWISE if incorrect
+     //kishoreeeee
     VideoSize = FVector2D(frame.cols, frame.rows);
     
     
@@ -499,7 +511,7 @@ bool AFurniLife::ReadFrame()
         UE_LOG(LogTemp, Warning, TEXT("[Pixel Debug] Center (BGRA): %d %d %d %d"), center[0], center[1], center[2], center[3]);
 
     
-
+    cv::resize(frame, frame, cv::Size(VideoSize.X, VideoSize.Y));
     int Width = VideoSize.X;
     int Height = VideoSize.Y;
     for (int y = 0; y < Height; ++y)
@@ -633,14 +645,14 @@ void AFurniLife::RunModelInference()
     }
 
 
-    if (resized.empty() || resized.type() != CV_8UC4) {
-        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
-        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
-        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
-        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
-        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
-//        return;
-    }
+//    if (resized.empty() || resized.type() != CV_8UC4) {
+//        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
+//        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
+//        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
+//        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
+//        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
+////        return;
+//    }
 
     for (int y = 0; y < srcRows; ++y)
     {
@@ -770,6 +782,10 @@ void AFurniLife::ApplySegmentationMask()
 //    uchar centerAlpha = alphaMask.at<uchar>(cy, cx);
 //    alphaMask.at<uchar>(cy, cx) = 255;
 //    UE_LOG(LogTemp, Warning, TEXT("[Alpha Debug] Centereeeerrrrrrrrrrr alpha: %d"), centerAlpha);
+    
+    double minVal, maxVal;
+    cv::minMaxLoc(alphaMask, &minVal, &maxVal);
+    UE_LOG(LogTemp, Warning, TEXT("Alpha mask rangerrtttttttttttt: min = %f, max = %f"), minVal, maxVal);
     for (int y = 0; y < frame.rows; ++y)
     {
         for (int x = 0; x < frame.cols; ++x)
@@ -779,7 +795,13 @@ void AFurniLife::ApplySegmentationMask()
 //            px[3] = (alpha < 64) ? 0 : alpha;
 //            px[3] = alpha;
 //            px[3] = 255;
-            if (alpha < 64)  // Background
+//            if (alpha < 64)  // Background
+            int Threshold = FMath::Clamp((int)(maxVal * 0.5), 10, 64);
+//            UE_LOG(LogTemp, Warning, TEXT("in if of ThresholdDDDDDDDDDD : %d"), Threshold);
+//            UE_LOG(LogTemp, Warning, TEXT("in if of ThresholdDDDDDDDDDD : %d"), Threshold);
+//            UE_LOG(LogTemp, Warning, TEXT("in if of ThresholdDDDDDDDDDD : %d"), Threshold);
+//            UE_LOG(LogTemp, Warning, TEXT("in if of Thre-sholdDDDDDDDDDD : %d"), Threshold);
+            if (alpha < 32)
             {
                 px[0] = 0;     // B
                 px[1] = 255;   // G
@@ -792,9 +814,7 @@ void AFurniLife::ApplySegmentationMask()
             }
         }
     }
-    double minVal, maxVal;
-    cv::minMaxLoc(alphaMask, &minVal, &maxVal);
-    UE_LOG(LogTemp, Warning, TEXT("Alpha mask rangerrtttttttttttt: min = %f, max = %f"), minVal, maxVal);
+    
 
 }
 

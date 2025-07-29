@@ -25,16 +25,12 @@
 			"Name": "ImagePlate",
 			"Enabled": true
 		},
-        {
-          "Name": "NNERuntimeORT",
-          "Enabled": true,
-          "WhitelistPlatforms": [ "Mac" ]
-        }
-
-	],
-    "AdditionalNonAssetDirectories": [
-        "content/Models",
-        "Content/Models"
-    ]
-
+		{
+			"Name": "NNERuntimeORT",
+			"Enabled": true,
+			"PlatformAllowList": [
+				"Mac"
+			]
+		}
+	]
 }
