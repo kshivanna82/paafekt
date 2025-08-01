@@ -14,10 +14,6 @@
 #include "ImagePlateComponent.h"
 
 #include "Templates/UniquePtr.h"
-//#include "UObject/Class.h"
-//#include "UObject/Object.h"
-//#include "UObject/UObjectBaseUtility.h"
-
 #include "Materials/MaterialInstanceDynamic.h"
 #include "MediaPlayer.h"
 #include "MediaTexture.h"
@@ -37,7 +33,6 @@
 #endif
 
 #include "FurniLife.generated.h"
-
 
 UCLASS()
 class INTELLISPACE_API AFurniLife : public AActor
@@ -86,11 +81,6 @@ public:
 //        UMaterialInstanceDynamic* Camera_MatRaw;
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UMaterialInstanceDynamic* Camera_MatPost;
-    
-//    UPROPERTY(EditAnywhere, Category = "Materials")
-//        UMaterialInterface* BaseMaterial;
-
-    
         
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         USceneComponent* rootComp;

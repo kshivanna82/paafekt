@@ -24,15 +24,8 @@
 
 
 AFurniLife* AFurniLife::CurrentInstance = nullptr;
-ACineCameraActor* CineCameraActor = nullptr; // ❌ Missing semicolon
-//UCineCameraComponent* CineCamera = nullptr;
+ACineCameraActor* CineCameraActor = nullptr;
 
-//cv::VideoCapture cap;
-//cv::Mat frame;
-//cv::Mat resized;
-//cv::Mat alphaMask;
-//cv::Size cvSize;
-//cv::Mat cvMat;
 
 AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -200,38 +193,6 @@ void AFurniLife::BeginPlay()
         CineCameraActor = *It;
         break; // Take the first one found
     }
-//    for (TObjectIterator<UCineCameraComponent> It; It; ++It)
-//    {
-//        if (It->GetWorld() == GetWorld()) // Ensure it's from the current world
-//        {
-//            CineCamera = *It;
-//            break; // Take the first one found
-//        }
-//    }
-//    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-//    if (PC && CineCameraActor)
-//    {
-//        AActor* OwningActor = CineCamera->GetOwner();
-//        if (OwningActor)
-//            {
-//                PC->SetViewTargetWithBlend(CineCameraActor, 0.5f); // ✅ Correct type now
-//            }
-//        PC->SetViewTargetWithBlend(CineCamera, 0.5f); // 0.5s smooth transition
-//    }
-
-
-//    if (CineCamera)
-//    {
-//        ImagePlatePost->AttachToComponent(
-//            CineCamera->GetRootComponent(),
-////            CineCamera,
-//            FAttachmentTransformRules::SnapToTargetIncludingScale
-//        );
-//    }
-//    else
-//    {
-//        UE_LOG(LogTemp, Error, TEXT("❌ CineCamera not found!"));
-//    }
     
     APlayerStart* PlayerStart = nullptr;
     for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
@@ -333,101 +294,10 @@ void AFurniLife::Tick(float DeltaTime)
             }
         });
     }
-
-    
-    
-//    if (!cap.isOpened())
-//    {
-//        cap.release();
-//        cap.open(CameraID);
-//        UE_LOG(LogTemp, Warning, TEXT("📷 OpenCV VideoCapture was closed. Reopening."));
-//    }
-//    static int TickCount = 0;
-//    if (TickCount++ % 90 == 0)  // Every 60 frames (~2 sec at 30fps)
-//    {
-//        cap.release();
-//        cap.open(CameraID);
-//    }
-//    UE_LOG(LogTemp, Warning, TEXT("Camera IDDDDDDDDDD: %d "),
-//           CameraID);
-//#if PLATFORM_MAC
-    ///
-    ///
-//    RefreshTimer += DeltaTime;
-//    if (isStreamOpen && RefreshTimer >= 1.0f / RefreshRate)
-//    {
-//        RefreshTimer = 0.0f;
-//        AsyncTask(ENamedThreads::GameThread, [this]() {
-//            if (ReadFrame()) {
-//                GetWorld()->GetTimerManager().SetTimerForNextTick(this, &AFurniLife::OnNextVideoFrame);
-//            }
-//        });
-//    }
-    
-    
-//    double CurrentTime = GetWorld()->TimeSeconds;
-//
-//    if (isStreamOpen && (CurrentTime - LastProcessTime) >= (1.0 / RefreshRate))
-//    {
-//        LastProcessTime = CurrentTime;
-//        if (!cap.isOpened())
-//        {
-//            cap.release();
-//            cap.open(CameraID);
-//            UE_LOG(LogTemp, Warning, TEXT("📷 OpenCV VideoCapture was closed. Reopening."));
-//        }
-    
-    
-
-//        AsyncTask(ENamedThreads::GameThread, [this]() {
-//            if (ReadFrame()) {
-//                GetWorld()->GetTimerManager().SetTimerForNextTick(this, &AFurniLife::OnNextVideoFrame);
-//            }
-//        });
-    
-    
-//    }
-
-    
-//#endif
 }
-
-//void AFurniLife::OnNextVideoFrame()
-//{
-//    UE_LOG(LogTemp, Warning, TEXT("🎞️ OnNextVideoFrame called"));
-//
-//    // Apply mask, convert to BGRA, update texture
-//    ApplySegmentationMask();
-//
-//    // If using OpenCV frame → update texture
-//    cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
-//
-//    if (!Camera_Texture2D) return;
-//    static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
-//    UpdateTextureRegions(
-//                         Camera_Texture2D,
-//                         0,
-//                         1,
-//                         &Region,
-//                         VideoSize.X * sizeof(FColor),
-//                         //                         SrcPitch,
-//                         sizeof(FColor),
-//                         reinterpret_cast<uint8*>(ColorData.GetData()),
-//                         false
-//                         );
-//}
-
-
-
 
 void AFurniLife::OnCameraFrameFromPixelBuffer(CVPixelBufferRef buffer)
 {
-//    static int TickCount = 0;
-//    if (TickCount++ % 90 == 0)  // Every 60 frames (~2 sec at 30fps)
-//    {
-//        cap.release();
-//        cap.open(CameraID);
-//    }
     // Convert to cv::Mat
     CVPixelBufferLockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly);
     int width = CVPixelBufferGetWidth(buffer);
@@ -702,30 +572,6 @@ void AFurniLife::RunModelInference()
     const int srcStride = resized.step[0];
     const int srcCols = resized.cols;
     const int srcRows = resized.rows;
-//kishore
-    if (resized.channels() != 4)
-    {
-        UE_LOG(LogTemp, Log, TEXT("❌ ddddddfdd is  not 4"));
-        UE_LOG(LogTemp, Log, TEXT("❌ ddddddfdd is not 4"));
-        UE_LOG(LogTemp, Log, TEXT("❌ ddddddfdd is not 4"));
-        cv::cvtColor(resized, resized, cv::COLOR_BGR2BGRA);
-    }
-    if (resized.empty()) {
-        UE_LOG(LogTemp, Log, TEXT("❌ resized666666 is empty"));
-        UE_LOG(LogTemp, Log, TEXT("❌ resized666666 is empty"));
-        UE_LOG(LogTemp, Log, TEXT("❌ resized666666 is empty"));
-        return;
-    }
-
-
-//    if (resized.empty() || resized.type() != CV_8UC4) {
-//        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
-//        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
-//        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
-//        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
-//        UE_LOG(LogTemp, Log, TEXT("❌ resizedddddddd is empty or not CV_8UC4"));
-////        return;
-//    }
 
     for (int y = 0; y < srcRows; ++y)
     {
@@ -870,9 +716,7 @@ void AFurniLife::ApplySegmentationMask()
 //            px[3] = 255;
 //            if (alpha < 64)  // Background
             int Threshold = FMath::Clamp((int)(maxVal * 0.5), 10, 64);
-//            UE_LOG(LogTemp, Warning, TEXT("in if of ThresholdDDDDDDDDDD : %d"), Threshold);
-//            UE_LOG(LogTemp, Warning, TEXT("in if of ThresholdDDDDDDDDDD : %d"), Threshold);
-//            UE_LOG(LogTemp, Warning, TEXT("in if of ThresholdDDDDDDDDDD : %d"), Threshold);
+
 //            UE_LOG(LogTemp, Warning, TEXT("in if of Thre-sholdDDDDDDDDDD : %d"), Threshold);
             if (alpha < 32)
             {
