@@ -82,8 +82,8 @@ public:
         UMediaTexture* Camera_MediaTexture;
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UTextureRenderTarget2D* Camera_RenderTarget;
-    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-        UMaterialInstanceDynamic* Camera_MatRaw;
+//    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
+//        UMaterialInstanceDynamic* Camera_MatRaw;
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UMaterialInstanceDynamic* Camera_MatPost;
     
@@ -94,8 +94,8 @@ public:
         
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         USceneComponent* rootComp;
-    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-        UImagePlateComponent* ImagePlateRaw;
+//    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
+//        UImagePlateComponent* ImagePlateRaw;
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
         UImagePlateComponent* ImagePlatePost;
     UPROPERTY(BlueprintReadWrite, VisibleAnyWhere, Category = Camera)

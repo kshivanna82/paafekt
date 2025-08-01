@@ -17,9 +17,16 @@
 #endif
 #include "GameFramework/PlayerStart.h"
 #include "EngineUtils.h"  // For TActorIterator
+//#include "CineCameraActor.h"
+#include "CineCameraComponent.h"
+#include "Kismet/GameplayStatics.h"
+
 
 
 AFurniLife* AFurniLife::CurrentInstance = nullptr;
+//ACineCameraActor* CineCamera = nullptr; // ❌ Missing semicolon
+//UCineCameraComponent* CineCamera = nullptr;
+
 //cv::VideoCapture cap;
 //cv::Mat frame;
 //cv::Mat resized;
@@ -32,7 +39,7 @@ AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(Obje
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.bStartWithTickEnabled = true;
     rootComp = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
-    ImagePlateRaw = CreateDefaultSubobject<UImagePlateComponent>(TEXT("ImagePlateRaw"));
+//    ImagePlateRaw = CreateDefaultSubobject<UImagePlateComponent>(TEXT("ImagePlateRaw"));
     ImagePlatePost = CreateDefaultSubobject<UImagePlateComponent>(TEXT("ImagePlatePost"));
 //    ImagePlatePost->SetupAttachment(rootComp);
 //    ImagePlatePost->SetRelativeLocation(FVector(-245.0f, 395.0f, 226.0f));  // Tune this
@@ -40,6 +47,15 @@ AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(Obje
 //    ImagePlatePost->SetRelativeScale3D(FVector(1.0f, 200.0f, 200.0f));
     
     // Get PlayerStart transform
+//    ImagePlateComponent->AttachToComponent(CineCamera->GetRootComponent(), FAttachmentTransformRules::SnapToTargetIncludingScale);
+//    ImagePlateComponent->SetRelativeLocation(FVector(100.f, 0.f, 0.f));  // Adjust distance
+//    ImagePlateComponent->SetRelativeScale3D(FVector(1.f));              // Reset scale
+    
+    
+//    ImagePlatePost->AttachToComponent(CineCamera->GetRootComponent(), FAttachmentTransformRules::SnapToTargetIncludingScale);
+    ImagePlatePost->SetRelativeLocation(FVector(100.f, 0.f, 0.f));  // Adjust distance
+    ImagePlatePost->SetRelativeScale3D(FVector(1.f));              // Reset scale
+
     
 
 
@@ -105,7 +121,17 @@ static void UpdateTextureRegions(UTexture2D* Texture, int32 MipIndex, uint32 Num
 
                 RHICmdList.UnlockTexture2D(TexRes->GetTexture2DRHI(), Context->Mip, false);
                 RHIFlushResources();
-#else
+#endif
+#if PLATFORM_MAC
+//                FTexture2DResource* TexRes = (FTexture2DResource*)Texture->Resource;
+                if (!TexRes)
+                {
+                    UE_LOG(LogTemp, Error, TEXT("❌ Texture resource is null!"));
+                    return;
+                }
+                UE_LOG(LogTemp, Error, TEXT("Trying RHIUpdateTexture2D on Mac with size: %d x %d, pitch: %d, bpp: %d"),
+                       Context->Region->Width, Context->Region->Height, Context->Pitch, Context->Bpp);
+
                 RHIUpdateTexture2D(
                     TexRes->GetTexture2DRHI(),
                     Context->Mip,
@@ -122,6 +148,19 @@ static void UpdateTextureRegions(UTexture2D* Texture, int32 MipIndex, uint32 Num
             });
     }
 }
+//UTexture2D* CreateBGRA8Texture(FIntPoint Size)
+//{
+//    UTexture2D* NewTexture = UTexture2D::CreateTransient(Size.X, Size.Y, PF_B8G8R8A8);
+//    if (!NewTexture) return nullptr;
+//
+//    NewTexture->MipGenSettings = TMGS_NoMipmaps;
+//    NewTexture->SRGB = true;
+//    NewTexture->AddToRoot(); // prevent GC
+//    NewTexture->UpdateResource(); // 🔁 Ensures TexRes is valid
+//
+//    return NewTexture;
+//}
+
 
 
 static void UpdateTextureRegions(
@@ -161,17 +200,57 @@ void AFurniLife::BeginPlay()
 //    Camera_Texture2D->LODGroup = TEXTUREGROUP_UI;
 //    Camera_Texture2D->CompressionSettings = TC_Default;
     Camera_Texture2D->SRGB = Camera_RenderTarget->SRGB;
+    Camera_Texture2D->AddToRoot();
 //    Camera_Texture2D->NeverStream = true;
 //    Camera_Texture2D->SRGB = false;
     VideoMask_Texture2D->SRGB = false;
     Camera_Texture2D->UpdateResource();
     
-    APlayerStart* PlayerStart = nullptr;
-    for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
-    {
-        PlayerStart = *It;
-        break;
-    }
+//     Find the first CineCamera in the world
+//    for (TActorIterator<ACineCameraActor> It(GetWorld()); It; ++It)
+//    {
+//        CineCamera = *It;
+//        break; // Take the first one found
+//    }
+//    for (TObjectIterator<UCineCameraComponent> It; It; ++It)
+//    {
+//        if (It->GetWorld() == GetWorld()) // Ensure it's from the current world
+//        {
+//            CineCamera = *It;
+//            break; // Take the first one found
+//        }
+//    }
+//    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+//    if (PC && CineCamera)
+//    {
+//        AActor* OwningActor = CineCamera->GetOwner();
+//        if (OwningActor)
+//            {
+//                PC->SetViewTargetWithBlend(OwningActor, 0.5f); // ✅ Correct type now
+//            }
+////        PC->SetViewTargetWithBlend(CineCamera, 0.5f); // 0.5s smooth transition
+//    }
+
+
+//    if (CineCamera)
+//    {
+//        ImagePlatePost->AttachToComponent(
+//            CineCamera->GetRootComponent(),
+////            CineCamera,
+//            FAttachmentTransformRules::SnapToTargetIncludingScale
+//        );
+//    }
+//    else
+//    {
+//        UE_LOG(LogTemp, Error, TEXT("❌ CineCamera not found!"));
+//    }
+    
+//    APlayerStart* PlayerStart = nullptr;
+//    for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
+//    {
+//        PlayerStart = *It;
+//        break;
+//    }
 
 //    if (PlayerStart)
 //    {
@@ -283,7 +362,7 @@ void AFurniLife::Tick(float DeltaTime)
 //    }
 //    UE_LOG(LogTemp, Warning, TEXT("Camera IDDDDDDDDDD: %d "),
 //           CameraID);
-////#if PLATFORM_MAC
+//#if PLATFORM_MAC
     ///
     ///
 //    RefreshTimer += DeltaTime;
@@ -309,42 +388,46 @@ void AFurniLife::Tick(float DeltaTime)
 //            cap.open(CameraID);
 //            UE_LOG(LogTemp, Warning, TEXT("📷 OpenCV VideoCapture was closed. Reopening."));
 //        }
+    
+    
 
-        AsyncTask(ENamedThreads::GameThread, [this]() {
-            if (ReadFrame()) {
-                GetWorld()->GetTimerManager().SetTimerForNextTick(this, &AFurniLife::OnNextVideoFrame);
-            }
-        });
+//        AsyncTask(ENamedThreads::GameThread, [this]() {
+//            if (ReadFrame()) {
+//                GetWorld()->GetTimerManager().SetTimerForNextTick(this, &AFurniLife::OnNextVideoFrame);
+//            }
+//        });
+    
+    
 //    }
 
     
-////#endif
+//#endif
 }
 
-void AFurniLife::OnNextVideoFrame()
-{
-    UE_LOG(LogTemp, Warning, TEXT("🎞️ OnNextVideoFrame called"));
-
-    // Apply mask, convert to BGRA, update texture
-    ApplySegmentationMask();
-
-    // If using OpenCV frame → update texture
-    cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
-
-    if (!Camera_Texture2D) return;
-    static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
-    UpdateTextureRegions(
-                         Camera_Texture2D,
-                         0,
-                         1,
-                         &Region,
-                         VideoSize.X * sizeof(FColor),
-                         //                         SrcPitch,
-                         sizeof(FColor),
-                         reinterpret_cast<uint8*>(ColorData.GetData()),
-                         false
-                         );
-}
+//void AFurniLife::OnNextVideoFrame()
+//{
+//    UE_LOG(LogTemp, Warning, TEXT("🎞️ OnNextVideoFrame called"));
+//
+//    // Apply mask, convert to BGRA, update texture
+//    ApplySegmentationMask();
+//
+//    // If using OpenCV frame → update texture
+//    cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
+//
+//    if (!Camera_Texture2D) return;
+//    static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
+//    UpdateTextureRegions(
+//                         Camera_Texture2D,
+//                         0,
+//                         1,
+//                         &Region,
+//                         VideoSize.X * sizeof(FColor),
+//                         //                         SrcPitch,
+//                         sizeof(FColor),
+//                         reinterpret_cast<uint8*>(ColorData.GetData()),
+//                         false
+//                         );
+//}
 
 
 
@@ -477,8 +560,9 @@ bool AFurniLife::ReadFrame()
         UE_LOG(LogTemp, Warning, TEXT("Camera frame is empty"));
         return false;
     }
-    
+#if PLATFORM_IOS
     cv::rotate(frame, frame, cv::ROTATE_90_COUNTERCLOCKWISE);  // or try COUNTERCLOCKWISE if incorrect
+#endif
      //kishoreeeee
     VideoSize = FVector2D(frame.cols, frame.rows);
     
@@ -549,8 +633,9 @@ bool AFurniLife::ReadFrame()
     UE_LOG(LogTemp, Warning, TEXT("🧵 About to update texture with BGRA frame 22222..."));
 
     
-
-    static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
+//kishhh
+//    static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
+    static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.Y, VideoSize.X);
     UpdateTextureRegions(
         Camera_Texture2D,
         0,
