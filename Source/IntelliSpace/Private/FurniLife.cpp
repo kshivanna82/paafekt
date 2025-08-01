@@ -17,14 +17,14 @@
 #endif
 #include "GameFramework/PlayerStart.h"
 #include "EngineUtils.h"  // For TActorIterator
-//#include "CineCameraActor.h"
-#include "CineCameraComponent.h"
+#include "CineCameraActor.h"
+//#include "CineCameraComponent.h"
 #include "Kismet/GameplayStatics.h"
 
 
 
 AFurniLife* AFurniLife::CurrentInstance = nullptr;
-//ACineCameraActor* CineCamera = nullptr; // ❌ Missing semicolon
+ACineCameraActor* CineCameraActor = nullptr; // ❌ Missing semicolon
 //UCineCameraComponent* CineCamera = nullptr;
 
 //cv::VideoCapture cap;
@@ -148,18 +148,6 @@ static void UpdateTextureRegions(UTexture2D* Texture, int32 MipIndex, uint32 Num
             });
     }
 }
-//UTexture2D* CreateBGRA8Texture(FIntPoint Size)
-//{
-//    UTexture2D* NewTexture = UTexture2D::CreateTransient(Size.X, Size.Y, PF_B8G8R8A8);
-//    if (!NewTexture) return nullptr;
-//
-//    NewTexture->MipGenSettings = TMGS_NoMipmaps;
-//    NewTexture->SRGB = true;
-//    NewTexture->AddToRoot(); // prevent GC
-//    NewTexture->UpdateResource(); // 🔁 Ensures TexRes is valid
-//
-//    return NewTexture;
-//}
 
 
 
@@ -207,11 +195,11 @@ void AFurniLife::BeginPlay()
     Camera_Texture2D->UpdateResource();
     
 //     Find the first CineCamera in the world
-//    for (TActorIterator<ACineCameraActor> It(GetWorld()); It; ++It)
-//    {
-//        CineCamera = *It;
-//        break; // Take the first one found
-//    }
+    for (TActorIterator<ACineCameraActor> It(GetWorld()); It; ++It)
+    {
+        CineCameraActor = *It;
+        break; // Take the first one found
+    }
 //    for (TObjectIterator<UCineCameraComponent> It; It; ++It)
 //    {
 //        if (It->GetWorld() == GetWorld()) // Ensure it's from the current world
@@ -221,14 +209,14 @@ void AFurniLife::BeginPlay()
 //        }
 //    }
 //    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-//    if (PC && CineCamera)
+//    if (PC && CineCameraActor)
 //    {
 //        AActor* OwningActor = CineCamera->GetOwner();
 //        if (OwningActor)
 //            {
-//                PC->SetViewTargetWithBlend(OwningActor, 0.5f); // ✅ Correct type now
+//                PC->SetViewTargetWithBlend(CineCameraActor, 0.5f); // ✅ Correct type now
 //            }
-////        PC->SetViewTargetWithBlend(CineCamera, 0.5f); // 0.5s smooth transition
+//        PC->SetViewTargetWithBlend(CineCamera, 0.5f); // 0.5s smooth transition
 //    }
 
 
@@ -245,28 +233,28 @@ void AFurniLife::BeginPlay()
 //        UE_LOG(LogTemp, Error, TEXT("❌ CineCamera not found!"));
 //    }
     
-//    APlayerStart* PlayerStart = nullptr;
-//    for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
-//    {
-//        PlayerStart = *It;
-//        break;
-//    }
+    APlayerStart* PlayerStart = nullptr;
+    for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
+    {
+        PlayerStart = *It;
+        break;
+    }
 
-//    if (PlayerStart)
-//    {
-//        FVector ForwardOffset = PlayerStart->GetActorForwardVector() * 200.0f;  // 200 units in front
-//        FVector PlacementLocation = PlayerStart->GetActorLocation() + ForwardOffset + FVector(0, 0, 100);  // Add height if needed
-//        FRotator PlacementRotation = PlayerStart->GetActorRotation();  // Match player's facing direction
-//
-//        if (!ImagePlatePost)
-//        {
-//            UE_LOG(LogTemp, Error, TEXT("❌ ImagePlatePost is null!"));
-//            return;
-//        }
-//
-//        ImagePlatePost->SetWorldLocation(PlacementLocation);
-//        ImagePlatePost->SetWorldRotation(PlacementRotation);
-//    }
+    if (PlayerStart)
+    {
+        FVector ForwardOffset = PlayerStart->GetActorForwardVector() * 25.0f;  // 200 units in front
+        FVector PlacementLocation = PlayerStart->GetActorLocation() + ForwardOffset + FVector(0, 0, 100);  // Add height if needed
+        FRotator PlacementRotation = PlayerStart->GetActorRotation();  // Match player's facing direction
+
+        if (!ImagePlatePost)
+        {
+            UE_LOG(LogTemp, Error, TEXT("❌ ImagePlatePost is null!"));
+            return;
+        }
+
+        ImagePlatePost->SetWorldLocation(PlacementLocation);
+        ImagePlatePost->SetWorldRotation(PlacementRotation);
+    }
 
 #if PLATFORM_IOS
 //    StartCameraStreaming();
