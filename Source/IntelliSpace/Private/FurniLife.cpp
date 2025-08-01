@@ -21,8 +21,6 @@
 //#include "CineCameraComponent.h"
 #include "Kismet/GameplayStatics.h"
 
-
-
 AFurniLife* AFurniLife::CurrentInstance = nullptr;
 ACineCameraActor* CineCameraActor = nullptr;
 
@@ -46,8 +44,9 @@ AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(Obje
     
     
 //    ImagePlatePost->AttachToComponent(CineCamera->GetRootComponent(), FAttachmentTransformRules::SnapToTargetIncludingScale);
-    ImagePlatePost->SetRelativeLocation(FVector(100.f, 0.f, 0.f));  // Adjust distance
-    ImagePlatePost->SetRelativeScale3D(FVector(1.f));              // Reset scale
+    //KKKKKKKKKKKK
+//    ImagePlatePost->SetRelativeLocation(FVector(100.f, 0.f, 0.f));  // Adjust distance
+//    ImagePlatePost->SetRelativeScale3D(FVector(1.f));              // Reset scale
 
     
 
@@ -203,7 +202,7 @@ void AFurniLife::BeginPlay()
 
     if (PlayerStart)
     {
-        FVector ForwardOffset = PlayerStart->GetActorForwardVector() * 25.0f;  // 200 units in front
+        FVector ForwardOffset = PlayerStart->GetActorForwardVector() * 25.0f;  // 25 units in front
         FVector PlacementLocation = PlayerStart->GetActorLocation() + ForwardOffset + FVector(0, 0, 100);  // Add height if needed
         FRotator PlacementRotation = PlayerStart->GetActorRotation();  // Match player's facing direction
 
@@ -254,9 +253,6 @@ void AFurniLife::BeginPlay()
     }
 #endif
 }
-
-
-//static double LastProcessTime = 0;
 
 static double LastProcessTime = 0;
 static double LastCameraCheckTime = 0;
@@ -420,9 +416,10 @@ bool AFurniLife::ReadFrame()
     }
 #if PLATFORM_IOS
     cv::rotate(frame, frame, cv::ROTATE_90_COUNTERCLOCKWISE);  // or try COUNTERCLOCKWISE if incorrect
-#endif
+
      //kishoreeeee
     VideoSize = FVector2D(frame.cols, frame.rows);
+#endif
     
     
     ProcessInputForModel();
@@ -492,8 +489,9 @@ bool AFurniLife::ReadFrame()
 
     
 //kishhh
-//    static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
-    static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.Y, VideoSize.X);
+    static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.X, VideoSize.Y);
+    //THIS COULD BE A FIX FOR SOMETHING
+//    static FUpdateTextureRegion2D Region(0, 0, 0, 0, VideoSize.Y, VideoSize.X);
     UpdateTextureRegions(
         Camera_Texture2D,
         0,
