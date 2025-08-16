@@ -713,7 +713,7 @@ void AFurniLife::ApplySegmentationMask()
 //            px[3] = alpha;
 //            px[3] = 255;
 //            if (alpha < 64)  // Background
-            int Threshold = FMath::Clamp((int)(maxVal * 0.5), 10, 64);
+//            int Threshold = FMath::Clamp((int)(maxVal * 0.5), 10, 64);
 
 //            UE_LOG(LogTemp, Warning, TEXT("in if of Thre-sholdDDDDDDDDDD : %d"), Threshold);
             if (alpha < 32)
