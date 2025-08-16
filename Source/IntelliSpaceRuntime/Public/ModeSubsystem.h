@@ -6,19 +6,24 @@
 UENUM(BlueprintType)
 enum class EISAppMode : uint8
 {
-    SegAndDecor        UMETA(DisplayName="Segment & Decor"),
-    Builder3D          UMETA(DisplayName="3D Builder"),
-    FutureInteriorDesign UMETA(DisplayName="Future: Interior Design")
+    SegAndDecor           UMETA(DisplayName="SegAndDecor"),
+    Builder3D             UMETA(DisplayName="Builder3D"),
+    FutureInteriorDesign  UMETA(DisplayName="FutureInteriorDesign"),
+    // Keep legacy/alias values if needed:
+    Builder               UMETA(Hidden)
 };
 
 UCLASS()
-class UModeSubsystem : public UGameInstanceSubsystem
+class INTELLISPACERUNTIME_API UModeSubsystem : public UGameInstanceSubsystem
 {
     GENERATED_BODY()
 public:
-    virtual void Initialize(FSubsystemCollectionBase& Coll) override { CurrentMode = EISAppMode::SegAndDecor; }
-    UFUNCTION(BlueprintCallable) void SetMode(EISAppMode M) { CurrentMode = M; UE_LOG(LogIntelliSpace, Log, TEXT("[Mode] Switched to %d"), (int)M); }
-    UFUNCTION(BlueprintCallable) EISAppMode GetMode() const { return CurrentMode; }
+    UFUNCTION(BlueprintCallable)
+    void SetMode(EISAppMode M) { CurrentMode = M; }
+
+    UFUNCTION(BlueprintCallable)
+    EISAppMode GetMode() const { return CurrentMode; }
+
 private:
-    EISAppMode CurrentMode;
+    EISAppMode CurrentMode = EISAppMode::SegAndDecor;
 };

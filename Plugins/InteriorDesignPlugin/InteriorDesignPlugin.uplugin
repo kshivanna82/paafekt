@@ -1,0 +1,16 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "Interior Design Plugin",
+  "Description": "Provides InteriorDesignActor and helpers for IntelliSpace FutureInteriorDesign mode.",
+  "Category": "Gameplay",
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "InteriorDesignPlugin",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ]
+}

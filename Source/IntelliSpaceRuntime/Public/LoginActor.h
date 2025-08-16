@@ -1,23 +1,26 @@
+// LoginActor.h (fixed)
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "Blueprint/UserWidget.h"
 #include "LoginActor.generated.h"
 
+class UAuthSubsystem;
+
 UCLASS()
-class ALoginActor : public AActor
+class INTELLISPACERUNTIME_API ALoginActor : public AActor
 {
     GENERATED_BODY()
 public:
+    ALoginActor();
+
+protected:
     virtual void BeginPlay() override;
 
-    UPROPERTY(EditAnywhere, Category="UI") TSubclassOf<UUserWidget> LoginWidgetClass;
-    UPROPERTY(EditAnywhere, Category="Flow") FName MainLevelName = "Main";
+    UFUNCTION() void OnOtpStarted(bool bOk);
+    UFUNCTION() void OnOtpVerified(bool bOk);
+
+    UFUNCTION(BlueprintCallable) void ProceedToMain();
 
 private:
-    UFUNCTION() void OnSendClicked();
-    UFUNCTION() void OnVerifyClicked();
-    UFUNCTION() void OnLogoutClicked();
-    void ProceedToMain();
-    UUserWidget* LoginWidget = nullptr;
+    UPROPERTY() UAuthSubsystem* Auth = nullptr;
 };
