@@ -1,113 +1,111 @@
 #include "ISGameInstance.h"
-#include "ISUserDataSaveGame.h"
-#include "UI/FirstRunSlate.h"
-#include "Kismet/GameplayStatics.h"
+
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+//#include "UObject/CoreUObjectDelegates.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/SWeakWidget.h"
 
-#include "Widgets/SWeakWidget.h"        // <-- required
-#include "Widgets/Text/STextBlock.h"
-#include "Widgets/SOverlay.h"
+#include "Kismet/GameplayStatics.h"
+#include "UI/FirstRunSlate.h"
+#include "ISUserDataSaveGame.h"
 
-static const TCHAR* FirstRunSlot = TEXT("UserData");
-static const int32 UserIndex = 0;
+void UISGameInstance::Init()
+{
+    Super::Init();
 
-//void UISGameInstance::Init()
-//{
-//    Super::Init();
-//    UE_LOG(LogTemp, Log, TEXT("UISGameInstance::Init"));
-//    FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(
-//        this, &UISGameInstance::HandlePostLoadMap);
-//}
-
-//void UISGameInstance::OnStart()
-//{
-//    Super::OnStart();
-//    UE_LOG(LogTemp, Log, TEXT("UISGameInstance::OnStart"));
-//    if (GEngine && GEngine->GameViewport)
-//    {
-//        AddFirstRunUI(); // your function that adds the Slate widget
-//    }
-//}
-
-//void UISGameInstance::HandlePostLoadMap(UWorld*)
-//{
-//    UE_LOG(LogTemp, Log, TEXT("UISGameInstance::HandlePostLoadMap"));
-//    AddFirstRunUI();
-//}
-
+    // Fire every time a new world/map is loaded
+    FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(
+        this, &UISGameInstance::OnPostLoadMapWithWorld);
+}
 
 void UISGameInstance::OnStart()
 {
-	Super::OnStart();
-    
-    if (GEngine && GEngine->GameViewport)
+    Super::OnStart();
+    // Optional: you could open a specific map here if desired.
+    // UGameplayStatics::OpenLevel(this, FName(TEXT("/Game/Maps/YourStartupMap")));
+}
+
+void UISGameInstance::OnPostLoadMapWithWorld(UWorld* /*LoadedWorld*/)
+{
+    // Only show the first-run UI if we don't already have data
+    FString Name, Phone;
+    if (!LoadUserData(Name, Phone))
     {
-        TSharedRef<STextBlock> DebugText =
-            SNew(STextBlock).Text(FText::FromString(TEXT("Rendering OK")))
-                            .Justification(ETextJustify::Center)
-                            .Font(FSlateFontInfo("Verdana", 28));
-        GEngine->GameViewport->AddViewportWidgetContent(
-            SNew(SWeakWidget).PossiblyNullContent(DebugText), 1000);
+        AddFirstRunUI();
+    }
+}
+
+void UISGameInstance::AddFirstRunUI()
+{
+    if (!GEngine || !GEngine->GameViewport || FirstRunUI.IsValid())
+    {
+        return;
     }
 
+    // Build the Slate widget
+    TSharedRef<SFirstRunSlate> WidgetRef =
+        SNew(SFirstRunSlate)
+        .OnSubmitted(FOnFirstRunSubmitted::CreateUObject(
+            this, &UISGameInstance::OnFirstRunSubmitted));
 
-	if (!HasCompletedFirstRun())
-	{
-		ShowFirstRun();
-	}
+    FirstRunUI = WidgetRef;
+
+    // Add to the viewport
+    GEngine->GameViewport->AddViewportWidgetContent(FirstRunUI.ToSharedRef(), /*ZOrder*/ 100);
+
+    // Give it keyboard focus
+    FSlateApplication::Get().SetKeyboardFocus(WidgetRef);
 }
 
-bool UISGameInstance::HasCompletedFirstRun() const
+void UISGameInstance::RemoveFirstRunUI()
 {
-	if (UGameplayStatics::DoesSaveGameExist(FirstRunSlot, UserIndex))
-	{
-		if (auto* Save = Cast<UISUserDataSaveGame>(UGameplayStatics::LoadGameFromSlot(FirstRunSlot, UserIndex)))
-		{
-			return Save->bCompleted;
-		}
-	}
-	return false;
-}
-
-void UISGameInstance::ShowFirstRun()
-{
-	if (!GEngine || !GEngine->GameViewport) { return; }
-
-	TSharedRef<SFirstRunSlate> Widget =
-		SNew(SFirstRunSlate)
-        .OnSubmitted(FOnFirstRunSubmitted::CreateUObject(this, &UISGameInstance::OnFirstRunSubmitted));
-
-	FirstRunWidget = Widget;
-	GEngine->GameViewport->AddViewportWidgetContent(Widget, 10000 /*z-order*/);
+    if (GEngine && GEngine->GameViewport && FirstRunUI.IsValid())
+    {
+        GEngine->GameViewport->RemoveViewportWidgetContent(FirstRunUI.ToSharedRef());
+        FirstRunUI.Reset();
+    }
 }
 
 void UISGameInstance::OnFirstRunSubmitted(const FString& Name, const FString& Phone)
 {
-	UISUserDataSaveGame* Save = nullptr;
+    SaveUserData(Name, Phone);
+    RemoveFirstRunUI();
 
-	if (UGameplayStatics::DoesSaveGameExist(FirstRunSlot, UserIndex))
-	{
-		Save = Cast<UISUserDataSaveGame>(UGameplayStatics::LoadGameFromSlot(FirstRunSlot, UserIndex));
-	}
+    // Continue your normal startup flow here if needed (load map, show main UI, etc.)
+}
 
-	if (!Save)
-	{
-		Save = Cast<UISUserDataSaveGame>(UGameplayStatics::CreateSaveGameObject(UISUserDataSaveGame::StaticClass()));
-	}
+bool UISGameInstance::LoadUserData(FString& OutName, FString& OutPhone) const
+{
+    if (USaveGame* Base = UGameplayStatics::LoadGameFromSlot(FirstRunSlot, UserIndex))
+    {
+        if (const UISUserDataSaveGame* Typed = Cast<UISUserDataSaveGame>(Base))
+        {
+            OutName  = Typed->UserName;
+            OutPhone = Typed->Phone;
+            return !OutName.IsEmpty() && !OutPhone.IsEmpty();
+        }
+    }
+    return false;
+}
 
-	if (Save)
-	{
-		Save->Name = Name;
-		Save->Phone = Phone;
-		Save->bCompleted = true;
-		UGameplayStatics::SaveGameToSlot(Save, FirstRunSlot, UserIndex);
-	}
+bool UISGameInstance::SaveUserData(const FString& Name, const FString& Phone) const
+{
+    UISUserDataSaveGame* SaveObj = nullptr;
 
-	// Remove the widget
-	if (GEngine && GEngine->GameViewport && FirstRunWidget.IsValid())
-	{
-		GEngine->GameViewport->RemoveViewportWidgetContent(FirstRunWidget.ToSharedRef());
-		FirstRunWidget.Reset();
-	}
+    if (USaveGame* Base = UGameplayStatics::LoadGameFromSlot(FirstRunSlot, UserIndex))
+    {
+        SaveObj = Cast<UISUserDataSaveGame>(Base);
+    }
+
+    if (!SaveObj)
+    {
+        SaveObj = Cast<UISUserDataSaveGame>(UGameplayStatics::CreateSaveGameObject(UISUserDataSaveGame::StaticClass()));
+    }
+    if (!SaveObj) return false;
+
+    SaveObj->UserName = Name;
+    SaveObj->Phone    = Phone;
+
+    return UGameplayStatics::SaveGameToSlot(SaveObj, FirstRunSlot, UserIndex);
 }

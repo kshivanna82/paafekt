@@ -7,14 +7,12 @@
 UCLASS()
 class INTELLISPACERUNTIME_API UISUserDataSaveGame : public USaveGame
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
+
 public:
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="User")
-	FString Name;
+    UPROPERTY(BlueprintReadWrite, Category="IS|UserData")
+    FString UserName;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="User")
-	FString Phone;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="User")
-	bool bCompleted = false;
+    UPROPERTY(BlueprintReadWrite, Category="IS|UserData")
+    FString Phone;
 };

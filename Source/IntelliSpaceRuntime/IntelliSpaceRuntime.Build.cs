@@ -234,13 +234,13 @@ public class IntelliSpaceRuntime : ModuleRules
 
             PublicDependencyModuleNames.AddRange(new string[]
             {
-                    "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate", "Projects", "CinematicCamera"
+                    "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate", "Projects", "CinematicCamera","Slate","SlateCore","UMG"
             });
 
             PrivateDependencyModuleNames.AddRange(new string[]
             {
                     "Slate", "SlateCore", "InputCore" , "Core", "CoreUObject", "Engine", "Renderer", "RenderCore", "RHI", "RHICore", "Projects","Json", "UMG",
-                        "JsonUtilities","Chaos", "GeometryCore"
+                        "JsonUtilities","Chaos", "GeometryCore","ApplicationCore"
         
             });
             // Important for iOS/arm64 template consistency:
