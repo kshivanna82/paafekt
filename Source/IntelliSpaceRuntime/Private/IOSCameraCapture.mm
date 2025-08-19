@@ -1,6 +1,10 @@
-// IOSCameraCapture.mm
 #import <AVFoundation/AVFoundation.h>
 #include "PlatformCameraCaptureBridge.h"
+
+THIRD_PARTY_INCLUDES_START
+#include <Eigen/Sparse>
+#include <Eigen/IterativeLinearSolvers>
+THIRD_PARTY_INCLUDES_END
 
 #if PLATFORM_IOS
 
@@ -33,8 +37,7 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
 {
     if (!GCallback) return;
     CVPixelBufferRef pix = CMSampleBufferGetImageBuffer(sampleBuffer);
-    if (!pix) return;
-    GCallback(GUserData, pix);
+    if (pix) GCallback(GUserData, pix);
 }
 @end
 

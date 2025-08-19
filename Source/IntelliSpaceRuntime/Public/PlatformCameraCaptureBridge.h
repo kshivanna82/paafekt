@@ -1,6 +1,4 @@
-// PlatformCameraCaptureBridge.h
 #pragma once
-
 #include "CoreMinimal.h"
 
 #if PLATFORM_IOS || PLATFORM_MAC
@@ -18,7 +16,7 @@ extern "C" {
 }
 
 #if !(PLATFORM_IOS)
-inline void RegisterCameraHandler(void* /*UserData*/, FISCameraFrameCallback /*Callback*/) {}
+inline void RegisterCameraHandler(void*, FISCameraFrameCallback) {}
 inline void StartCameraCapture() {}
 inline void StopCameraCapture() {}
 #endif

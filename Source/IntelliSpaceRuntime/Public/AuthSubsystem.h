@@ -1,46 +1,69 @@
 #pragma once
+
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "AuthSubsystem.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnOtpStarted, bool, bOk);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnOtpVerified, bool, bOk);
+
 USTRUCT(BlueprintType)
-struct FISUserProfile {
+struct INTELLISPACERUNTIME_API FAuthProfile
+{
     GENERATED_BODY()
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FString UserId;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FString Name;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FString Phone;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FString Token;
 };
 
-UCLASS()
-class UAuthSubsystem : public UGameInstanceSubsystem {
+/**
+ * Simple OTP auth + JSON persistence used by tests.
+ */
+UCLASS(BlueprintType)
+class INTELLISPACERUNTIME_API UAuthSubsystem : public UGameInstanceSubsystem
+{
     GENERATED_BODY()
+
 public:
-    virtual void Initialize(FSubsystemCollectionBase& Coll) override;
+    // Subsystem lifecycle
+    virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
 
-    UFUNCTION(BlueprintCallable) bool IsLoggedIn() const { return !Profile.Token.IsEmpty(); }
-    UFUNCTION(BlueprintCallable) const FISUserProfile& GetProfile() const { return Profile; }
+    // Public API used by game & tests
+    UFUNCTION(BlueprintCallable, Category="Auth")
+    void StartOtp(const FString& PhoneNumber, const FString& CountryCode);
 
-    DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOtpStarted, bool, bOk);
-    DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOtpVerified, bool, bOk);
+    UFUNCTION(BlueprintCallable, Category="Auth")
+    void VerifyOtp(const FString& OtpCode);
 
-    UPROPERTY(BlueprintAssignable) FOtpStarted OnOtpStarted;
-    UPROPERTY(BlueprintAssignable) FOtpVerified OnOtpVerified;
+    UFUNCTION(BlueprintCallable, Category="Auth")
+    void Logout();
 
-    UFUNCTION(BlueprintCallable) void StartOtp(const FString& Phone, const FString& Name);
-    UFUNCTION(BlueprintCallable) void VerifyOtp(const FString& Code);
-    UFUNCTION(BlueprintCallable) void Logout();
+    UFUNCTION(BlueprintPure, Category="Auth")
+    bool IsLoggedIn() const { return !Profile.Token.IsEmpty(); }
 
-    void Save(); void Load();
+    // Test helpers (called directly by C++ tests)
+    void __Test_SetJsonPath(const FString& NewPath); // overrides default save path
+    void __Test_ClearProfile();                       // clears profile + saves
 
-#if WITH_DEV_AUTOMATION_TESTS
-    void __Test_SetJsonPath(const FString& InPath) { JsonPath = InPath; }
-    void __Test_ClearProfile() { Profile = {}; }
-#endif
+    // Signals
+    UPROPERTY(BlueprintAssignable, Category="Auth")
+    FOnOtpStarted OnOtpStarted;
+
+    UPROPERTY(BlueprintAssignable, Category="Auth")
+    FOnOtpVerified OnOtpVerified;
+
+    // Optional getter for verification in tests or BP
+    const FAuthProfile& GetProfile() const { return Profile; }
 
 private:
+    void LoadFromDisk();
+    void SaveToDisk() const;
+    static FString DefaultJsonPath();
+
+private:
+    FAuthProfile Profile;
     FString JsonPath;
-    FString PendingRequestId;
-    FISUserProfile Profile;
 };

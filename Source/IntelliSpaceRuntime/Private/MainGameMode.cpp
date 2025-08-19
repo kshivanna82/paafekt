@@ -1,10 +1,26 @@
 #include "MainGameMode.h"
-#include "Kismet/GameplayStatics.h"
-#include "ModeSubsystem.h"
+
+#include "ModeSubsystem.h"          // UModeSubsystem
+#include "Engine/GameInstance.h"    // UGameInstance + GetSubsystem<T>
+#include "Engine/World.h"           // UWorld + SpawnActor on world
+#include "Camera/CameraActor.h"        // <-- REQUIRED for ACameraActor
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h" // GetAllActorsOfClass
+
+#include "SegDecorActor.h"          // ASegDecorActor (template & StaticClass use)
+#include "ISBuilderActor.h"         // AISBuilderActor (if you spawn it)
 #include "ISLog.h"
 
 void AMainGameMode::BeginPlay(){
     Super::BeginPlay();
+    APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+    if (PC && !PC->GetViewTarget())
+    {
+        ACameraActor* Cam = GetWorld()->SpawnActor<ACameraActor>();
+        Cam->SetActorLocation(FVector(0, -300, 200));
+        Cam->SetActorRotation(FRotator(-10, 0, 0));
+        PC->SetViewTarget(Cam);
+    }
     UModeSubsystem* Mode = GetGameInstance()->GetSubsystem<UModeSubsystem>();
     const EISAppMode M = Mode ? Mode->GetMode() : EISAppMode::SegAndDecor;
 

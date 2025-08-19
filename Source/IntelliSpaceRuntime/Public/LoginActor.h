@@ -1,4 +1,3 @@
-// LoginActor.h (fixed)
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -16,11 +15,10 @@ public:
 protected:
     virtual void BeginPlay() override;
 
+private:
     UFUNCTION() void OnOtpStarted(bool bOk);
     UFUNCTION() void OnOtpVerified(bool bOk);
-
     UFUNCTION(BlueprintCallable) void ProceedToMain();
 
-private:
     UPROPERTY() UAuthSubsystem* Auth = nullptr;
 };

@@ -1,6 +1,6 @@
-// LoginActor.cpp (fixed)
 #include "LoginActor.h"
 #include "AuthSubsystem.h"
+#include "Engine/GameInstance.h"
 
 ALoginActor::ALoginActor()
 {
@@ -10,14 +10,15 @@ ALoginActor::ALoginActor()
 void ALoginActor::BeginPlay()
 {
     Super::BeginPlay();
-    UGameInstance* GI = GetGameInstance();
-    Auth = GI ? GI->GetSubsystem<UAuthSubsystem>() : nullptr;
+    if (UGameInstance* GI = GetGameInstance())
+    {
+        Auth = GI->GetSubsystem<UAuthSubsystem>();
+    }
     if (!Auth)
     {
         UE_LOG(LogTemp, Error, TEXT("[Login] AuthSubsystem missing"));
         return;
     }
-
     Auth->OnOtpStarted.AddDynamic(this, &ALoginActor::OnOtpStarted);
     Auth->OnOtpVerified.AddDynamic(this, &ALoginActor::OnOtpVerified);
 }

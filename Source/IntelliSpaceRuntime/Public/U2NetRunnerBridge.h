@@ -1,16 +1,13 @@
-// U2NetRunnerBridge.h
+//#pragma once
+//#include "CoreMinimal.h"
+//
+//// C bridge used by tests; implemented in a .cpp/.mm in this module.
+//extern "C" {
+//    INTELLISPACERUNTIME_API void* CreateU2NetRunner();
+//    INTELLISPACERUNTIME_API void  DestroyU2NetRunner(void* Runner);
+//}
 #pragma once
-#include "CoreMinimal.h"
-#include "PlatformCameraCaptureBridge.h" // <- gives FISPixelBufferRef
-
 extern "C" {
-
-// Example runner interface (adapt to your real signatures)
-void* CreateU2NetRunner();
-void  DestroyU2NetRunner(void* Runner);
-
-// Run segmentation on a pixel buffer (Apple) or raw pointer (others) via FISPixelBufferRef
-// Writes a single-channel mask [0..1] into OutMask (length = OutW*OutH).
-bool  U2NetRun(void* Runner, FISPixelBufferRef Pixel, float* OutMask, int32 OutW, int32 OutH);
-
+    void* CreateU2NetRunner();
+    void  DestroyU2NetRunner(void* runner);
 }

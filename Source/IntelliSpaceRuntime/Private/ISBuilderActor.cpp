@@ -1,26 +1,69 @@
-// ISBuilderActor.cpp
 #include "ISBuilderActor.h"
-#include "Misc/FileHelper.h"
-#include "Misc/Paths.h"
-#include "HAL/FileManager.h"
 
-void AISBuilderActor::SaveCurrentMeshOBJ(const FString& Name)
+AISBuilderActor::AISBuilderActor()
+    : AISBuilderActor(FObjectInitializer::Get())
 {
-    FString Out = TEXT("# MiDaS mesh\n");
-    // Vertices
-    for (const FVector& P : LastVerts)
-    {
-        Out += FString::Printf(TEXT("v %f %f %f\n"), P.X, P.Y, P.Z);
-    }
-    // Faces (OBJ is 1-indexed)
-    for (int32 i = 0; i + 2 < LastTris.Num(); i += 3)
-    {
-        Out += FString::Printf(TEXT("f %d %d %d\n"),
-                               LastTris[i] + 1, LastTris[i + 1] + 1, LastTris[i + 2] + 1);
-    }
+}
 
-    const FString ObjDir = FPaths::ProjectSavedDir() / TEXT("Meshes");
-    IFileManager::Get().MakeDirectory(*ObjDir, /*Tree*/true);
-    const FString ObjP = ObjDir / (Name + TEXT(".obj"));
-    FFileHelper::SaveStringToFile(Out, *ObjP);
+AISBuilderActor::AISBuilderActor(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer)
+{
+    PrimaryActorTick.bCanEverTick = true;
+}
+
+void AISBuilderActor::BeginPlay()
+{
+    Super::BeginPlay();
+    UE_LOG(LogTemp, Verbose, TEXT("[Builder] BeginPlay"));
+}
+
+void AISBuilderActor::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+}
+
+void AISBuilderActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    UE_LOG(LogTemp, Verbose, TEXT("[Builder] EndPlay"));
+    Super::EndPlay(EndPlayReason);
+}
+
+void AISBuilderActor::OnReview_Export()
+{
+    UE_LOG(LogTemp, Log, TEXT("[Builder] OnReview_Export"));
+}
+
+void AISBuilderActor::OnReview_Retake()
+{
+    UE_LOG(LogTemp, Log, TEXT("[Builder] OnReview_Retake"));
+}
+
+void AISBuilderActor::OnReview_Discard()
+{
+    UE_LOG(LogTemp, Log, TEXT("[Builder] OnReview_Discard"));
+}
+
+void AISBuilderActor::OnScanPrompt_Reset()
+{
+    UE_LOG(LogTemp, Log, TEXT("[Builder] OnScanPrompt_Reset"));
+}
+
+void AISBuilderActor::OnScanPrompt_Discard()
+{
+    UE_LOG(LogTemp, Log, TEXT("[Builder] OnScanPrompt_Discard"));
+}
+
+void AISBuilderActor::OnScanPrompt_BuildNow()
+{
+    UE_LOG(LogTemp, Log, TEXT("[Builder] OnScanPrompt_BuildNow"));
+}
+
+void AISBuilderActor::OnScanPrompt_KeepScanning()
+{
+    UE_LOG(LogTemp, Log, TEXT("[Builder] OnScanPrompt_KeepScanning"));
+}
+
+void AISBuilderActor::DiscardCurrentCapture()
+{
+    UE_LOG(LogTemp, Log, TEXT("[Builder] DiscardCurrentCapture"));
 }
