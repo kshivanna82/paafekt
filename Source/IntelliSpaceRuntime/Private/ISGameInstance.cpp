@@ -1,111 +1,106 @@
 #include "ISGameInstance.h"
 
+#include "IntelliSpaceRuntime.h"
+#include "ISUserDataSaveGame.h"
+#include "UI/FirstRunSlate.h"
+
+#include "UObject/CoreUObjectDelegates.h"
+#include "Kismet/GameplayStatics.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
-//#include "UObject/CoreUObjectDelegates.h"
+#include "GameFramework/PlayerController.h"
+#include "Camera/CameraActor.h"
+
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWeakWidget.h"
-
-#include "Kismet/GameplayStatics.h"
-#include "UI/FirstRunSlate.h"
-#include "ISUserDataSaveGame.h"
 
 void UISGameInstance::Init()
 {
     Super::Init();
 
-    // Fire every time a new world/map is loaded
-    FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(
-        this, &UISGameInstance::OnPostLoadMapWithWorld);
+    // Fire after any map loads (editor PIE & packaged)
+    FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UISGameInstance::HandlePostLoadMap);
+    UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("GameInstance Init"));
 }
 
-void UISGameInstance::OnStart()
+void UISGameInstance::HandlePostLoadMap(UWorld* LoadedWorld)
 {
-    Super::OnStart();
-    // Optional: you could open a specific map here if desired.
-    // UGameplayStatics::OpenLevel(this, FName(TEXT("/Game/Maps/YourStartupMap")));
-}
+    UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("Map loaded: %s"), *GetNameSafe(LoadedWorld));
 
-void UISGameInstance::OnPostLoadMapWithWorld(UWorld* /*LoadedWorld*/)
-{
-    // Only show the first-run UI if we don't already have data
-    FString Name, Phone;
-    if (!LoadUserData(Name, Phone))
+    EnsureCameraView(LoadedWorld);
+
+    // Show first-run UI only once (if there is no save)
+    if (!UGameplayStatics::DoesSaveGameExist(UISUserDataSaveGame::SlotName, UISUserDataSaveGame::UserIndex))
     {
         AddFirstRunUI();
     }
 }
 
+void UISGameInstance::EnsureCameraView(UWorld* World)
+{
+    if (!World) return;
+
+    APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
+    if (!PC) return;
+
+    // If the PC already has a view target (e.g., a spawned pawn), do nothing
+    if (PC->GetViewTarget()) return;
+
+    // Otherwise, pick the first CameraActor in the level
+    TArray<AActor*> Cameras;
+    UGameplayStatics::GetAllActorsOfClass(World, ACameraActor::StaticClass(), Cameras);
+    if (Cameras.Num() > 0)
+    {
+        PC->SetViewTarget(Cameras[0]);
+        UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("Set view to first CameraActor"));
+    }
+    else
+    {
+        UE_LOG(LogIntelliSpaceRuntime, Warning, TEXT("No CameraActor found; view target unchanged."));
+    }
+}
+
 void UISGameInstance::AddFirstRunUI()
 {
-    if (!GEngine || !GEngine->GameViewport || FirstRunUI.IsValid())
-    {
-        return;
-    }
+    if (!GEngine || !GEngine->GameViewport) return;
 
-    // Build the Slate widget
-    TSharedRef<SFirstRunSlate> WidgetRef =
+    // Build the Slate widget and add to viewport
+    TSharedRef<SFirstRunSlate> Panel =
         SNew(SFirstRunSlate)
-        .OnSubmitted(FOnFirstRunSubmitted::CreateUObject(
-            this, &UISGameInstance::OnFirstRunSubmitted));
+        .OnSubmitted(FOnFirstRunSubmitted::CreateUObject(this, &UISGameInstance::OnFirstRunSubmitted));
 
-    FirstRunUI = WidgetRef;
+    FirstRunRoot = Panel;
+    GEngine->GameViewport->AddViewportWidgetContent(Panel);
 
-    // Add to the viewport
-    GEngine->GameViewport->AddViewportWidgetContent(FirstRunUI.ToSharedRef(), /*ZOrder*/ 100);
-
-    // Give it keyboard focus
-    FSlateApplication::Get().SetKeyboardFocus(WidgetRef);
+    FSlateApplication::Get().SetAllUserFocus(Panel, EFocusCause::SetDirectly);
+    UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("First-run UI shown"));
 }
 
 void UISGameInstance::RemoveFirstRunUI()
 {
-    if (GEngine && GEngine->GameViewport && FirstRunUI.IsValid())
+    if (FirstRunRoot.IsValid() && GEngine && GEngine->GameViewport)
     {
-        GEngine->GameViewport->RemoveViewportWidgetContent(FirstRunUI.ToSharedRef());
-        FirstRunUI.Reset();
+        GEngine->GameViewport->RemoveViewportWidgetContent(FirstRunRoot.ToSharedRef());
+        FirstRunRoot.Reset();
+        UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("First-run UI removed"));
     }
 }
 
 void UISGameInstance::OnFirstRunSubmitted(const FString& Name, const FString& Phone)
 {
-    SaveUserData(Name, Phone);
+    // Save to slot
+    if (UISUserDataSaveGame* Save = Cast<UISUserDataSaveGame>(
+        UGameplayStatics::CreateSaveGameObject(UISUserDataSaveGame::StaticClass())))
+    {
+        Save->UserName    = Name;
+        Save->PhoneNumber = Phone;
+
+        const bool bOK = UGameplayStatics::SaveGameToSlot(
+            Save, UISUserDataSaveGame::SlotName, UISUserDataSaveGame::UserIndex);
+
+        UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("Saved first-run data: %s (phone hidden)  OK=%d"),
+            *Name, bOK ? 1 : 0);
+    }
+
     RemoveFirstRunUI();
-
-    // Continue your normal startup flow here if needed (load map, show main UI, etc.)
-}
-
-bool UISGameInstance::LoadUserData(FString& OutName, FString& OutPhone) const
-{
-    if (USaveGame* Base = UGameplayStatics::LoadGameFromSlot(FirstRunSlot, UserIndex))
-    {
-        if (const UISUserDataSaveGame* Typed = Cast<UISUserDataSaveGame>(Base))
-        {
-            OutName  = Typed->UserName;
-            OutPhone = Typed->Phone;
-            return !OutName.IsEmpty() && !OutPhone.IsEmpty();
-        }
-    }
-    return false;
-}
-
-bool UISGameInstance::SaveUserData(const FString& Name, const FString& Phone) const
-{
-    UISUserDataSaveGame* SaveObj = nullptr;
-
-    if (USaveGame* Base = UGameplayStatics::LoadGameFromSlot(FirstRunSlot, UserIndex))
-    {
-        SaveObj = Cast<UISUserDataSaveGame>(Base);
-    }
-
-    if (!SaveObj)
-    {
-        SaveObj = Cast<UISUserDataSaveGame>(UGameplayStatics::CreateSaveGameObject(UISUserDataSaveGame::StaticClass()));
-    }
-    if (!SaveObj) return false;
-
-    SaveObj->UserName = Name;
-    SaveObj->Phone    = Phone;
-
-    return UGameplayStatics::SaveGameToSlot(SaveObj, FirstRunSlot, UserIndex);
 }

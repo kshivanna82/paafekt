@@ -1,11 +1,11 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
+#include "Widgets/DeclarativeSyntaxSupport.h"
 
 DECLARE_DELEGATE_TwoParams(FOnFirstRunSubmitted, const FString& /*Name*/, const FString& /*Phone*/);
 
-class INTELLISPACERUNTIME_API SFirstRunSlate : public SCompoundWidget
+class SFirstRunSlate : public SCompoundWidget
 {
 public:
     SLATE_BEGIN_ARGS(SFirstRunSlate) {}
@@ -15,14 +15,9 @@ public:
     void Construct(const FArguments& InArgs);
 
 private:
-    FReply HandleSubmit();
-    bool   IsSubmitEnabled() const;
-
-private:
-    // UI state
+    FOnFirstRunSubmitted OnSubmitted;
     TSharedPtr<class SEditableTextBox> NameBox;
     TSharedPtr<class SEditableTextBox> PhoneBox;
 
-    // Callback
-    FOnFirstRunSubmitted OnSubmitted;
+    FReply OnSubmitClicked();
 };

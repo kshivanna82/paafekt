@@ -1,13 +1,12 @@
 #include "UI/FirstRunSlate.h"
 
-#include "Widgets/Layout/SBorder.h"
-#include "Widgets/Layout/SBox.h"
 #include "Widgets/SBoxPanel.h"
+#include "Widgets/Layout/SBorder.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Input/SButton.h"
 
-#define LOCTEXT_NAMESPACE "FirstRunSlate"
+#define LOCTEXT_NAMESPACE "FirstRun"
 
 void SFirstRunSlate::Construct(const FArguments& InArgs)
 {
@@ -18,82 +17,53 @@ void SFirstRunSlate::Construct(const FArguments& InArgs)
         SNew(SBorder)
         .Padding(24.f)
         [
-            SNew(SBox)
-            .WidthOverride(520.f)
+            SNew(SVerticalBox)
+
+            + SVerticalBox::Slot().AutoHeight().Padding(0,0,0,12)
             [
-                SNew(SVerticalBox)
+                SNew(STextBlock).Text(LOCTEXT("Welcome", "Welcome! Please enter your details"))
+            ]
 
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                .Padding(0.f, 0.f, 0.f, 12.f)
-                [
-                    SNew(STextBlock)
-                    .Text(LOCTEXT("Title", "Welcome!"))
-                    .Font(FSlateFontInfo("Verdana", 20))
-                ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0,0,0,8)
+            [
+                SNew(STextBlock).Text(LOCTEXT("NameLbl", "Name"))
+            ]
 
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                .Padding(0.f, 0.f, 0.f, 6.f)
-                [
-                    SNew(STextBlock)
-                    .Text(LOCTEXT("NameLabel", "Your Name"))
-                ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0,0,0,12)
+            [
+                SAssignNew(NameBox, SEditableTextBox)
+                .MinDesiredWidth(420.f)
+                .HintText(LOCTEXT("NameHint", "Jane Doe"))
+            ]
 
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                .Padding(0.f, 0.f, 0.f, 12.f)
-                [
-                    SAssignNew(NameBox, SEditableTextBox)
-                    .HintText(LOCTEXT("NameHint", "e.g. Alex Li"))
-                    .MinDesiredWidth(480.f)
-                ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0,0,0,8)
+            [
+                SNew(STextBlock).Text(LOCTEXT("PhoneLbl", "Phone"))
+            ]
 
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                .Padding(0.f, 0.f, 0.f, 6.f)
-                [
-                    SNew(STextBlock)
-                    .Text(LOCTEXT("PhoneLabel", "Phone Number"))
-                ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0,0,0,16)
+            [
+                SAssignNew(PhoneBox, SEditableTextBox)
+                .MinDesiredWidth(420.f)
+                .HintText(LOCTEXT("PhoneHint", "+1 555 123 4567"))
+            ]
 
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                .Padding(0.f, 0.f, 0.f, 16.f)
-                [
-                    SAssignNew(PhoneBox, SEditableTextBox)
-                    .HintText(LOCTEXT("PhoneHint", "+1 555 123 4567"))
-                    .MinDesiredWidth(480.f)
-                    // NOTE: Avoided KeyboardType to keep 5.4 compatibility
-                ]
-
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                [
-                    SNew(SButton)
-                    .Text(LOCTEXT("Continue", "Continue"))
-                    .IsEnabled(this, &SFirstRunSlate::IsSubmitEnabled)
-                    .OnClicked(this, &SFirstRunSlate::HandleSubmit)
-                ]
+            + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+            [
+                SNew(SButton)
+                .Text(LOCTEXT("Submit", "Submit"))
+                .OnClicked(this, &SFirstRunSlate::OnSubmitClicked)
             ]
         ]
     ];
 }
 
-bool SFirstRunSlate::IsSubmitEnabled() const
+FReply SFirstRunSlate::OnSubmitClicked()
 {
-    const bool bHasName  = NameBox.IsValid()  && !NameBox->GetText().ToString().TrimStartAndEnd().IsEmpty();
-    const bool bHasPhone = PhoneBox.IsValid() && !PhoneBox->GetText().ToString().TrimStartAndEnd().IsEmpty();
-    return bHasName && bHasPhone;
-}
-
-FReply SFirstRunSlate::HandleSubmit()
-{
-    const FString Name  = NameBox.IsValid()  ? NameBox->GetText().ToString().TrimStartAndEnd()  : FString();
-    const FString Phone = PhoneBox.IsValid() ? PhoneBox->GetText().ToString().TrimStartAndEnd() : FString();
-
     if (OnSubmitted.IsBound())
     {
+        const FString Name  = NameBox.IsValid()  ? NameBox->GetText().ToString()  : FString();
+        const FString Phone = PhoneBox.IsValid() ? PhoneBox->GetText().ToString() : FString();
         OnSubmitted.Execute(Name, Phone);
     }
     return FReply::Handled();

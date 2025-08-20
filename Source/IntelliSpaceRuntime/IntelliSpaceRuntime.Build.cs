@@ -8,6 +8,8 @@ public class IntelliSpaceRuntime : ModuleRules
     public IntelliSpaceRuntime(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+        PrivatePCHHeaderFile = "Public/IntelliSpaceRuntime.h";
+        CppStandard = CppStandardVersion.Cpp17;
         if (Target.Platform == UnrealTargetPlatform.IOS)
         {
             //PublicDefinitions.Add("UE_ENABLE_RTTI=1");
@@ -243,6 +245,10 @@ public class IntelliSpaceRuntime : ModuleRules
                         "JsonUtilities","Chaos", "GeometryCore","ApplicationCore"
         
             });
+        PrivateIncludePaths.AddRange(new string[]
+        {
+            "IntelliSpaceRuntime/Private"
+        });
             // Important for iOS/arm64 template consistency:
         AddEngineThirdPartyPrivateStaticDependencies(Target, "Eigen");
         // (Optional) keep Eigen build in “UE default” mode:
