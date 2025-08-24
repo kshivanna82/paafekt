@@ -1,106 +1,78 @@
-#include "ISGameInstance.h"
+#include "ISGameInstance.h" // must be first
 
-#include "IntelliSpaceRuntime.h"
-#include "ISUserDataSaveGame.h"
 #include "UI/FirstRunSlate.h"
-
-#include "UObject/CoreUObjectDelegates.h"
-#include "Kismet/GameplayStatics.h"
-#include "Engine/Engine.h"
-#include "Engine/GameViewportClient.h"
-#include "GameFramework/PlayerController.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Camera/CameraActor.h"
-
+#include "GameFramework/PlayerController.h"
 #include "Framework/Application/SlateApplication.h"
-#include "Widgets/SWeakWidget.h"
+#include "Widgets/SWindow.h"
 
-void UISGameInstance::Init()
+void UISGameInstance::OnStart()
 {
-    Super::Init();
+    Super::OnStart();
 
-    // Fire after any map loads (editor PIE & packaged)
-    FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UISGameInstance::HandlePostLoadMap);
-    UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("GameInstance Init"));
+    // Ensure a valid view so we don't get a black screen
+    EnsureCameraView();
+
+    // Optional panel
+    ShowFirstRunIfNeeded();
 }
 
-void UISGameInstance::HandlePostLoadMap(UWorld* LoadedWorld)
+void UISGameInstance::ShowFirstRunIfNeeded()
 {
-    UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("Map loaded: %s"), *GetNameSafe(LoadedWorld));
-
-    EnsureCameraView(LoadedWorld);
-
-    // Show first-run UI only once (if there is no save)
-    if (!UGameplayStatics::DoesSaveGameExist(UISUserDataSaveGame::SlotName, UISUserDataSaveGame::UserIndex))
+    if (!IsFirstRun())
     {
-        AddFirstRunUI();
+        return;
+    }
+
+    TSharedRef<SFirstRunSlate> Panel = SNew(SFirstRunSlate)
+        .OnSubmit(FOnSubmit::CreateUObject(this, &UISGameInstance::OnFirstRunSubmitted));
+
+
+    FirstRunWindow = SNew(SWindow)
+        .Title(FText::FromString(TEXT("Welcome")))
+        .SizingRule(ESizingRule::Autosized)
+        .AutoCenter(EAutoCenter::PreferredWorkArea)
+        .SupportsMaximize(false)
+        .SupportsMinimize(false)
+    [
+        Panel
+    ];
+
+    FSlateApplication::Get().AddWindow(FirstRunWindow.ToSharedRef());
+}
+
+void UISGameInstance::OnFirstRunSubmitted()
+{
+    if (FirstRunWindow.IsValid())
+    {
+        FirstRunWindow->RequestDestroyWindow();
+        FirstRunWindow.Reset();
     }
 }
 
-void UISGameInstance::EnsureCameraView(UWorld* World)
+void UISGameInstance::EnsureCameraView()
 {
+    UWorld* World = GetWorld();
     if (!World) return;
 
-    APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
+    APlayerController* PC = World->GetFirstPlayerController();
     if (!PC) return;
 
-    // If the PC already has a view target (e.g., a spawned pawn), do nothing
-    if (PC->GetViewTarget()) return;
-
-    // Otherwise, pick the first CameraActor in the level
-    TArray<AActor*> Cameras;
-    UGameplayStatics::GetAllActorsOfClass(World, ACameraActor::StaticClass(), Cameras);
-    if (Cameras.Num() > 0)
+    // If no view target yet, try to use any CameraActor placed in the level
+    if (!PC->GetViewTarget())
     {
-        PC->SetViewTarget(Cameras[0]);
-        UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("Set view to first CameraActor"));
-    }
-    else
-    {
-        UE_LOG(LogIntelliSpaceRuntime, Warning, TEXT("No CameraActor found; view target unchanged."));
+        for (TActorIterator<ACameraActor> It(World); It; ++It)
+        {
+            PC->SetViewTarget(*It);
+            break;
+        }
     }
 }
 
-void UISGameInstance::AddFirstRunUI()
+bool UISGameInstance::IsFirstRun() const
 {
-    if (!GEngine || !GEngine->GameViewport) return;
-
-    // Build the Slate widget and add to viewport
-    TSharedRef<SFirstRunSlate> Panel =
-        SNew(SFirstRunSlate)
-        .OnSubmitted(FOnFirstRunSubmitted::CreateUObject(this, &UISGameInstance::OnFirstRunSubmitted));
-
-    FirstRunRoot = Panel;
-    GEngine->GameViewport->AddViewportWidgetContent(Panel);
-
-    FSlateApplication::Get().SetAllUserFocus(Panel, EFocusCause::SetDirectly);
-    UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("First-run UI shown"));
-}
-
-void UISGameInstance::RemoveFirstRunUI()
-{
-    if (FirstRunRoot.IsValid() && GEngine && GEngine->GameViewport)
-    {
-        GEngine->GameViewport->RemoveViewportWidgetContent(FirstRunRoot.ToSharedRef());
-        FirstRunRoot.Reset();
-        UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("First-run UI removed"));
-    }
-}
-
-void UISGameInstance::OnFirstRunSubmitted(const FString& Name, const FString& Phone)
-{
-    // Save to slot
-    if (UISUserDataSaveGame* Save = Cast<UISUserDataSaveGame>(
-        UGameplayStatics::CreateSaveGameObject(UISUserDataSaveGame::StaticClass())))
-    {
-        Save->UserName    = Name;
-        Save->PhoneNumber = Phone;
-
-        const bool bOK = UGameplayStatics::SaveGameToSlot(
-            Save, UISUserDataSaveGame::SlotName, UISUserDataSaveGame::UserIndex);
-
-        UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("Saved first-run data: %s (phone hidden)  OK=%d"),
-            *Name, bOK ? 1 : 0);
-    }
-
-    RemoveFirstRunUI();
+    // Replace with real check if needed
+    return false;
 }

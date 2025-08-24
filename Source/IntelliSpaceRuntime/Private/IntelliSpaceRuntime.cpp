@@ -1,26 +1,15 @@
-// IntelliSpaceRuntime.cpp
-#include "CoreMinimal.h"
-#include "Modules/ModuleManager.h"
+#include "IntelliSpaceRuntime.h" // must be first
 
-// If other files in your project want to UE_LOG with LogIntelliSpaceRuntime,
-// also add the small public header shown below and include it there.
-DEFINE_LOG_CATEGORY_STATIC(LogIntelliSpaceRuntime, Log, All);
+#include "ISLog.h"
 
-class FIntelliSpaceRuntimeModule final : public IModuleInterface
+void FIntelliSpaceRuntimeModule::StartupModule()
 {
-public:
-    virtual void StartupModule() override
-    {
-        UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("IntelliSpaceRuntime module STARTUP"));
-    }
+    UE_LOG(LogIntelliSpace, Log, TEXT("IntelliSpaceRuntime module started"));
+}
 
-    virtual void ShutdownModule() override
-    {
-        UE_LOG(LogIntelliSpaceRuntime, Log, TEXT("IntelliSpaceRuntime module SHUTDOWN"));
-    }
-
-    // This is a game module (not an editor-only module)
-    virtual bool IsGameModule() const override { return true; }
-};
+void FIntelliSpaceRuntimeModule::ShutdownModule()
+{
+    UE_LOG(LogIntelliSpace, Log, TEXT("IntelliSpaceRuntime module shutdown"));
+}
 
 IMPLEMENT_MODULE(FIntelliSpaceRuntimeModule, IntelliSpaceRuntime)
