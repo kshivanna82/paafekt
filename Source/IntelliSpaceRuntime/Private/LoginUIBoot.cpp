@@ -20,7 +20,7 @@ void ALoginUIBoot::BeginPlay()
     {
         if (Saved->IsValidSession())
         {
-            GoToMain();
+//            GoToMain();
             return;
         }
     }
@@ -46,15 +46,15 @@ void ALoginUIBoot::BeginPlay()
     LoginWidget->OnVerifyOtpRequested.AddDynamic(this, &ALoginUIBoot::HandleVerifyOtp);
 }
 
-void ALoginUIBoot::HandleSendOtp(const FString& Phone, int32 OtpDigits)
-{
-    PendingPhone = Phone;
-
-    // TODO (real app): call your backend to send OTP via SMS.
-    // For now, generate a demo OTP and log it so you can test.
-    ServerGeneratedOtp = TEXT("123456"); // Or generate randomly for local testing
-    UE_LOG(LogTemp, Log, TEXT("📲 Demo OTP for %s is %s"), *Phone, *ServerGeneratedOtp);
-}
+//void ALoginUIBoot::HandleSendOtp(const FString& Phone, int32 OtpDigits)
+//{
+//    PendingPhone = Phone;
+//
+//    // TODO (real app): call your backend to send OTP via SMS.
+//    // For now, generate a demo OTP and log it so you can test.
+//    ServerGeneratedOtp = TEXT("123456"); // Or generate randomly for local testing
+//    UE_LOG(LogTemp, Log, TEXT("📲 Demo OTP for %s is %s"), *Phone, *ServerGeneratedOtp);
+//}
 
 void ALoginUIBoot::HandleVerifyOtp(const FString& Phone, const FString& OtpInput)
 {
@@ -79,7 +79,7 @@ void ALoginUIBoot::HandleVerifyOtp(const FString& Phone, const FString& OtpInput
     if (AuthSession::Save(SaveObj))
     {
         UE_LOG(LogTemp, Log, TEXT("✅ Logged in as %s; token saved"), *Phone);
-        GoToMain();
+//        GoToMain();
     }
     else
     {
@@ -87,8 +87,57 @@ void ALoginUIBoot::HandleVerifyOtp(const FString& Phone, const FString& OtpInput
     }
 }
 
-void ALoginUIBoot::GoToMain()
+//void ALoginUIBoot::GoToMain()
+//{
+//    if (MainMapName.IsNone()) { UE_LOG(LogTemp, Error, TEXT("MainMapName not set")); return; }
+//    UGameplayStatics::OpenLevel(this, MainMapName);
+//}
+
+void ALoginUIBoot::HandleSendOtp(const FString& Phone, int32 Digits)
 {
-    if (MainMapName.IsNone()) { UE_LOG(LogTemp, Error, TEXT("MainMapName not set")); return; }
-    UGameplayStatics::OpenLevel(this, MainMapName);
+    PendingPhone = Phone;
+
+    // TODO: call backend to send OTP (placeholder)
+    ServerGeneratedOtp = TEXT("123456");
+    UE_LOG(LogTemp, Log, TEXT("📲 Demo OTP for %s: %s"), *Phone, *ServerGeneratedOtp);
+
+    // Per your request: immediately continue to U²-Net path
+    EnterU2NetMode();
 }
+
+void ALoginUIBoot::EnterU2NetMode()
+{
+    if (LoginWidget)
+    {
+        LoginWidget->RemoveFromParent();
+        LoginWidget = nullptr;
+    }
+
+    SwitchToGameInput();
+
+    if (U2NetActorClass)
+    {
+        FActorSpawnParameters Params;
+        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+        AActor* SegActor =
+            GetWorld()->SpawnActor<AActor>(U2NetActorClass, FVector::ZeroVector, FRotator::ZeroRotator, Params);
+
+        UE_LOG(LogTemp, Log, TEXT("✅ Spawned SegDecorActor: %s"), *GetNameSafe(SegActor));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("U2NetActorClass not set on LoginUIBoot"));
+    }
+}
+
+void ALoginUIBoot::SwitchToGameInput()
+{
+    if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
+    {
+        FInputModeGameOnly Mode;
+        PC->SetInputMode(Mode);
+        PC->bShowMouseCursor = false;
+    }
+}
+
