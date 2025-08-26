@@ -25,14 +25,19 @@ void ULoginWidget::NativeOnInitialized()
     if (PhoneBox)
     {
         PhoneBox->SetHintText(FText::FromString(TEXT("Enter phone number")));
-        PhoneBox->WidgetStyle.SetForegroundColor(TextCol);
-        PhoneBox->WidgetStyle.SetBackgroundColor(BgCol);
+
+        // Make typed text dark & larger (works on all versions)
+        PhoneBox->WidgetStyle.TextStyle.ColorAndOpacity = FSlateColor(FLinearColor::Black);
+        PhoneBox->WidgetStyle.SetForegroundColor(FSlateColor(FLinearColor::Black));
+        PhoneBox->WidgetStyle.TextStyle.Font.Size = 22;   // pick your size
     }
     if (OtpBox)
     {
         OtpBox->SetHintText(FText::FromString(TEXT("Enter OTP")));
-        OtpBox->WidgetStyle.SetForegroundColor(TextCol);
-        OtpBox->WidgetStyle.SetBackgroundColor(BgCol);
+        
+        OtpBox->WidgetStyle.TextStyle.ColorAndOpacity = FSlateColor(FLinearColor::Black);
+        OtpBox->WidgetStyle.SetForegroundColor(FSlateColor(FLinearColor::Black));
+        OtpBox->WidgetStyle.TextStyle.Font.Size = 22;
     }
     // 2) Buttons: flat style + labels
     const FLinearColor Normal  (0.16f, 0.16f, 0.16f, 1.f); // dark gray

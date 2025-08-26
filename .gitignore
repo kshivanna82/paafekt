@@ -8,7 +8,6 @@ ThirdParty/
 *.onnx
 IOS/
 *.xcsettings
-*.png
 *.bat
 *.sh
 *.sln
@@ -16,3 +15,4 @@ IOS/
 *.pdf
 *.xcworkspacedata
 *.xcuserstate
+._*.png
