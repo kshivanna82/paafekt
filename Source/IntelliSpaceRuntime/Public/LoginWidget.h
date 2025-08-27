@@ -1,44 +1,45 @@
+// Source/IntelliSpaceRuntime/Public/LoginWidget.h
 #pragma once
+
+#include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "LoginWidget.generated.h"
 
 class UEditableTextBox;
 class UButton;
-class UTextBlock;
+class UPanelWidget; // for grouping/hiding OTP row (e.g., HorizontalBox/SizeBox/Canvas slot)
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSendOtpRequested, const FString&, PhoneNumber, int32, OtpDigits);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnVerifyOtpRequested, const FString&, PhoneNumber, const FString&, OtpInput);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSendOtp,  const FString&, Phone);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnVerifyOtp, const FString&, Phone, const FString&, Code);
 
 UCLASS()
 class INTELLISPACERUNTIME_API ULoginWidget : public UUserWidget
 {
     GENERATED_BODY()
+
 public:
-    UPROPERTY(meta=(BindWidget)) class UEditableTextBox* PhoneBox;
-    UPROPERTY(meta=(BindWidget)) class UEditableTextBox* OtpBox;
-    UPROPERTY(meta=(BindWidget)) class UButton* SendOtpButton;
-    UPROPERTY(meta=(BindWidget)) class UButton* VerifyButton;
+    UPROPERTY(BlueprintAssignable) FOnSendOtp OnSendOtp;
+    UPROPERTY(BlueprintAssignable) FOnVerifyOtp OnVerifyOtp;
 
-    UPROPERTY(BlueprintAssignable, Category="Login")
-    FOnSendOtpRequested OnSendOtpRequested;
-
-    UPROPERTY(BlueprintAssignable, Category="Login")
-    FOnVerifyOtpRequested OnVerifyOtpRequested;
-
-    virtual void NativeOnInitialized() override;
 protected:
-    // Click handlers we bind in .cpp (must exist!)
-    UFUNCTION() void OnSendOtpClicked();
-    UFUNCTION() void OnVerifyClicked();
+    virtual void NativeOnInitialized() override;
 
-    // Helper used by .cpp to style and label buttons
-    void ApplyButtonStyle(UButton* Btn, const FText& LabelText, UTextBlock*& OutLabel);
-
-private:
-    // Runtime-created text labels for the buttons
-    UPROPERTY() UTextBlock* SendOtpLabel = nullptr;
-    UPROPERTY() UTextBlock* VerifyLabel  = nullptr;
-    
-    UFUNCTION() void HandleSendOtp();
+    UFUNCTION() void HandleSend();
     UFUNCTION() void HandleVerify();
+
+public:
+    // Bind these from WBP_Login
+    UPROPERTY(meta=(BindWidget)) UEditableTextBox* PhoneBox = nullptr;
+    UPROPERTY(meta=(BindWidget)) UButton*         SendOtpButton = nullptr;
+
+    // OTP section (start hidden). If you don’t have a container, bind OtpBox+VerifyButton directly.
+    UPROPERTY(meta=(BindWidgetOptional)) UPanelWidget* OtpRow = nullptr;
+    UPROPERTY(meta=(BindWidget)) UEditableTextBox* OtpBox = nullptr;
+    UPROPERTY(meta=(BindWidget)) UButton*         VerifyButton = nullptr;
+
+    // Call to switch UI from “send” step to “otp verify” step
+    UFUNCTION(BlueprintCallable) void ShowOtpStep();
+
+    // Helpers
+    UFUNCTION(BlueprintCallable) static bool IsDigitsOnly(const FString& S);
 };

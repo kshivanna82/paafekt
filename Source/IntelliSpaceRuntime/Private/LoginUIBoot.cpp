@@ -1,143 +1,142 @@
 #include "LoginUIBoot.h"
-#include "LoginWidget.h"
-#include "AuthSaveGame.h"
-#include "AuthSessionUtil.h"
-#include "Blueprint/UserWidget.h"
+
+#include "Components/Button.h"
+#include "Components/TextBlock.h"
+#include "Components/EditableTextBox.h"
+#include "Components/PanelWidget.h"
+#include "Components/PanelSlot.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/CanvasPanelSlot.h"
+
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"                 // ✅ needed: APawn complete type
+#include "Engine/World.h"
 
-static FString MakeFakeToken(const FString& Phone)
+#include "SegDecorActor.h"
+
+// Small helper: try to set padding on whatever slot the widget lives in.
+static void TrySetSlotPadding(UWidget* Widget, const FMargin& Pad)
 {
-    return FString::Printf(TEXT("tok_%s_%lld"), *Phone, FDateTime::UtcNow().GetTicks());
+    if (!Widget || !Widget->Slot) return;
+
+    if (auto* V = Cast<UVerticalBoxSlot>(Widget->Slot)) { V->SetPadding(Pad); return; }
+    if (auto* H = Cast<UHorizontalBoxSlot>(Widget->Slot)) { H->SetPadding(Pad); return; }
+    if (auto* C = Cast<UCanvasPanelSlot>(Widget->Slot))   { C->SetAutoSize(true); /* Canvas uses Offsets, no padding */ }
+    // Add more slot types here if you use them (UniformGridSlot, GridSlot, etc.)
 }
 
-void ALoginUIBoot::BeginPlay()
+// Utility: make a simple colored brush for button states
+static FSlateBrush MakeFlatBrush(const FLinearColor& Tint)
 {
-    Super::BeginPlay();
-
-    // 1) Auto-skip login if already authenticated
-    if (UAuthSaveGame* Saved = AuthSession::Load())
-    {
-        if (Saved->IsValidSession())
-        {
-//            GoToMain();
-            return;
-        }
-    }
-
-    // 2) Show login UI (first time or expired)
-    if (!LoginWidgetClass) { UE_LOG(LogTemp, Error, TEXT("LoginWidgetClass not set")); return; }
-
-    LoginWidget = CreateWidget<ULoginWidget>(GetWorld(), LoginWidgetClass);
-    if (!LoginWidget) { UE_LOG(LogTemp, Error, TEXT("CreateWidget failed")); return; }
-
-    LoginWidget->AddToViewport(1000);
-
-    if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
-    {
-        FInputModeUIOnly Mode;
-        Mode.SetWidgetToFocus(LoginWidget->TakeWidget());
-        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-        PC->SetInputMode(Mode);
-        PC->bShowMouseCursor = true;
-    }
-
-    LoginWidget->OnSendOtpRequested.AddDynamic(this, &ALoginUIBoot::HandleSendOtp);
-    LoginWidget->OnVerifyOtpRequested.AddDynamic(this, &ALoginUIBoot::HandleVerifyOtp);
+    FSlateBrush Brush;
+    Brush.TintColor = FSlateColor(Tint);
+    Brush.DrawAs = ESlateBrushDrawType::Box;
+    Brush.Margin = FMargin(0.25f);
+    return Brush;
 }
 
-//void ALoginUIBoot::HandleSendOtp(const FString& Phone, int32 OtpDigits)
-//{
-//    PendingPhone = Phone;
-//
-//    // TODO (real app): call your backend to send OTP via SMS.
-//    // For now, generate a demo OTP and log it so you can test.
-//    ServerGeneratedOtp = TEXT("123456"); // Or generate randomly for local testing
-//    UE_LOG(LogTemp, Log, TEXT("📲 Demo OTP for %s is %s"), *Phone, *ServerGeneratedOtp);
-//}
-
-void ALoginUIBoot::HandleVerifyOtp(const FString& Phone, const FString& OtpInput)
+void ULoginUIBoot::NativeConstruct()
 {
-    // TODO (real app): call backend API to verify OTPInput.
-    const bool bOk = (Phone == PendingPhone) && (OtpInput == ServerGeneratedOtp);
+    Super::NativeConstruct();
 
-    if (!bOk)
+    StyleTextBoxes();
+    StyleVerifyButton();
+
+    if (VerifyButton)
     {
-        UE_LOG(LogTemp, Warning, TEXT("OTP verify failed for %s"), *Phone);
+        VerifyButton->OnClicked.RemoveAll(this);
+        VerifyButton->OnClicked.AddDynamic(this, &ULoginUIBoot::OnVerifyClicked);
+    }
+
+    // ✅ set layout padding via slot (not on the text box itself)
+    TrySetSlotPadding(PhoneTextBox, FMargin(12.f, 8.f));
+    TrySetSlotPadding(OtpTextBox,   FMargin(12.f, 8.f));
+}
+
+void ULoginUIBoot::StyleTextBoxes()
+{
+    if (PhoneTextBox)
+    {
+        PhoneTextBox->SetHintText(FText::FromString(TEXT("Enter phone number")));
+        PhoneTextBox->SetIsPassword(false);
+        PhoneTextBox->WidgetStyle.ForegroundColor = FSlateColor(FLinearColor::White);
+        PhoneTextBox->WidgetStyle.BackgroundImageNormal  = MakeFlatBrush(FLinearColor(0.f,0.f,0.f,0.65f));
+        PhoneTextBox->WidgetStyle.BackgroundImageHovered = MakeFlatBrush(FLinearColor(0.05f,0.05f,0.05f,0.75f));
+        PhoneTextBox->WidgetStyle.BackgroundImageFocused = MakeFlatBrush(FLinearColor(0.0f,0.3f,0.0f,0.85f));
+    }
+
+    if (OtpTextBox)
+    {
+        OtpTextBox->SetHintText(FText::FromString(TEXT("Enter OTP")));
+        OtpTextBox->SetIsPassword(false);
+        OtpTextBox->WidgetStyle.ForegroundColor = FSlateColor(FLinearColor::White);
+        OtpTextBox->WidgetStyle.BackgroundImageNormal  = MakeFlatBrush(FLinearColor(0.f,0.f,0.f,0.65f));
+        OtpTextBox->WidgetStyle.BackgroundImageHovered = MakeFlatBrush(FLinearColor(0.05f,0.05f,0.05f,0.75f));
+        OtpTextBox->WidgetStyle.BackgroundImageFocused = MakeFlatBrush(FLinearColor(0.0f,0.3f,0.0f,0.85f));
+    }
+}
+
+void ULoginUIBoot::StyleVerifyButton()
+{
+    if (!VerifyButton) return;
+
+    FButtonStyle Btn;
+    Btn.SetNormal (MakeFlatBrush(FLinearColor(0.07f, 0.45f, 0.10f, 1.f)));
+    Btn.SetHovered(MakeFlatBrush(FLinearColor(0.12f, 0.60f, 0.18f, 1.f)));
+    Btn.SetPressed(MakeFlatBrush(FLinearColor(0.03f, 0.30f, 0.07f, 1.f)));
+    Btn.SetDisabled(MakeFlatBrush(FLinearColor(0.2f, 0.2f, 0.2f, 0.6f)));
+    Btn.SetNormalPadding (FMargin(8.f));
+    Btn.SetPressedPadding(FMargin(10.f, 6.f, 6.f, 10.f));
+
+    VerifyButton->SetStyle(Btn);
+    VerifyButton->SetIsEnabled(true);
+
+    if (VerifyLabel)
+    {
+        VerifyLabel->SetText(FText::FromString(TEXT("Verify")));
+        VerifyLabel->SetJustification(ETextJustify::Center);
+        VerifyLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+        FSlateFontInfo FontInfo = VerifyLabel->GetFont();
+        FontInfo.Size = 22;
+        FontInfo.TypefaceFontName = FName("Bold");
+        VerifyLabel->SetFont(FontInfo);
+    }
+}
+
+void ULoginUIBoot::OnVerifyClicked()
+{
+    const bool bHasPhone = PhoneTextBox && !PhoneTextBox->GetText().IsEmpty();
+    const bool bHasOtp   = OtpTextBox   && !OtpTextBox->GetText().IsEmpty();
+    if (!bHasPhone || !bHasOtp)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ Phone/OTP missing."));
         return;
     }
 
-    // Create/save session
-    UAuthSaveGame* SaveObj = Cast<UAuthSaveGame>(UGameplayStatics::CreateSaveGameObject(UAuthSaveGame::StaticClass()));
-    SaveObj->UserId = Phone;
-    SaveObj->AuthToken = MakeFakeToken(Phone); // replace with real token from server
-    SaveObj->bLoggedIn = true;
+    UWorld* World = GetWorld();
+    if (!World) return;
 
-    // Optional expiry: e.g., 365 days
-    SaveObj->TokenExpiryUtc = FDateTime::UtcNow() + FTimespan(365,0,0,0);
+    APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
+    if (!PC) return;
 
-    if (AuthSession::Save(SaveObj))
+    AActor* Found = UGameplayStatics::GetActorOfClass(World, ASegDecorActor::StaticClass());
+    if (!Found)
     {
-        UE_LOG(LogTemp, Log, TEXT("✅ Logged in as %s; token saved"), *Phone);
-//        GoToMain();
+        UE_LOG(LogTemp, Error, TEXT("SegDecorActor not found in level."));
+        return;
+    }
+
+    // ✅ now APawn is a complete type, so this Cast compiles
+    if (APawn* AsPawn = Cast<APawn>(Found))
+    {
+        PC->Possess(AsPawn);
+        UE_LOG(LogTemp, Log, TEXT("✅ Possessed SegDecorActor Pawn."));
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to save session"));
+        PC->SetViewTargetWithBlend(Found, 0.5f);
+        UE_LOG(LogTemp, Log, TEXT("✅ Switched view to SegDecorActor."));
     }
 }
-
-//void ALoginUIBoot::GoToMain()
-//{
-//    if (MainMapName.IsNone()) { UE_LOG(LogTemp, Error, TEXT("MainMapName not set")); return; }
-//    UGameplayStatics::OpenLevel(this, MainMapName);
-//}
-
-void ALoginUIBoot::HandleSendOtp(const FString& Phone, int32 Digits)
-{
-    PendingPhone = Phone;
-
-    // TODO: call backend to send OTP (placeholder)
-    ServerGeneratedOtp = TEXT("123456");
-    UE_LOG(LogTemp, Log, TEXT("📲 Demo OTP for %s: %s"), *Phone, *ServerGeneratedOtp);
-
-    // Per your request: immediately continue to U²-Net path
-    EnterU2NetMode();
-}
-
-void ALoginUIBoot::EnterU2NetMode()
-{
-    if (LoginWidget)
-    {
-        LoginWidget->RemoveFromParent();
-        LoginWidget = nullptr;
-    }
-
-    SwitchToGameInput();
-
-    if (U2NetActorClass)
-    {
-        FActorSpawnParameters Params;
-        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-        AActor* SegActor =
-            GetWorld()->SpawnActor<AActor>(U2NetActorClass, FVector::ZeroVector, FRotator::ZeroRotator, Params);
-
-        UE_LOG(LogTemp, Log, TEXT("✅ Spawned SegDecorActor: %s"), *GetNameSafe(SegActor));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("U2NetActorClass not set on LoginUIBoot"));
-    }
-}
-
-void ALoginUIBoot::SwitchToGameInput()
-{
-    if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
-    {
-        FInputModeGameOnly Mode;
-        PC->SetInputMode(Mode);
-        PC->bShowMouseCursor = false;
-    }
-}
-
