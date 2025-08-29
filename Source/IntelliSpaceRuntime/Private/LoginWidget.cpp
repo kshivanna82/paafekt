@@ -1,8 +1,8 @@
-// Source/IntelliSpaceRuntime/Private/LoginWidget.cpp
-#include "LoginWidget.h"
+login#include "LoginWidget.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Button.h"
 #include "Components/PanelWidget.h"
+#include "Components/TextBlock.h"
 #include "Styling/SlateTypes.h"
 #include "Styling/SlateColor.h"
 #include "Styling/SlateBrush.h"
@@ -20,7 +20,7 @@ void ULoginWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
 
-    // Make typed text dark and a bit larger (engine-agnostic)
+    // Typed text styling
     if (PhoneBox)
     {
         PhoneBox->SetHintText(FText::FromString(TEXT("Enter phone number")));
@@ -46,10 +46,12 @@ void ULoginWidget::NativeOnInitialized()
         OtpBox->SetVisibility(ESlateVisibility::Collapsed);
         VerifyButton->SetVisibility(ESlateVisibility::Collapsed);
     }
-    
+
+    // Button labels (optional children)
     if (SendOtpLabel)  SendOtpLabel->SetText(FText::FromString(TEXT("Send OTP")));
     if (VerifyLabel)   VerifyLabel->SetText(FText::FromString(TEXT("Verify")));
 
+    // Bind clicks
     if (SendOtpButton)
     {
         SendOtpButton->OnClicked.Clear();
@@ -64,51 +66,33 @@ void ULoginWidget::NativeOnInitialized()
 
 void ULoginWidget::ShowOtpStep()
 {
-    // Disable phone editing during OTP step
-    if (PhoneBox)
-    {
-        PhoneBox->SetIsEnabled(false);
-    }
-    // Hide Send
-    if (SendOtpButton)
-    {
-        SendOtpButton->SetVisibility(ESlateVisibility::Collapsed);
-    }
-    // Show OTP controls
+    if (PhoneBox) PhoneBox->SetIsEnabled(false);
+    if (SendOtpButton) SendOtpButton->SetVisibility(ESlateVisibility::Collapsed);
+
+    // IMPORTANT: interactive controls must be Visible (not SelfHitTestInvisible)
     if (OtpRow)
     {
-//        OtpRow->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
         OtpRow->SetVisibility(ESlateVisibility::Visible);
     }
     else
     {
-//        if (OtpBox)      OtpBox->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-//        if (VerifyButton)VerifyButton->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-        if (OtpBox)      OtpBox->SetVisibility(ESlateVisibility::Visible);
-        if (VerifyButton)VerifyButton->SetVisibility(ESlateVisibility::Visible);
+        if (OtpBox)       OtpBox->SetVisibility(ESlateVisibility::Visible);
+        if (VerifyButton) VerifyButton->SetVisibility(ESlateVisibility::Visible);
     }
 }
 
 void ULoginWidget::HandleSend()
 {
     const FString Phone = PhoneBox ? PhoneBox->GetText().ToString() : TEXT("");
-    if (!IsDigitsOnly(Phone))
-    {
-        // Optional: add a simple red border, or just early-out.
-        return;
-    }
+    if (!IsDigitsOnly(Phone)) return;
 
-    // Switch UI to OTP step right away
     ShowOtpStep();
-
-    // Notify code-behind
-    OnSendOtp.Broadcast(Phone);
+    OnSendOtp.Broadcast(Phone); // VALUE param
 }
 
 void ULoginWidget::HandleVerify()
 {
     const FString Phone = PhoneBox ? PhoneBox->GetText().ToString() : TEXT("");
     const FString Code  = OtpBox   ? OtpBox->GetText().ToString()   : TEXT("");
-
-    OnVerifyOtp.Broadcast(Phone, Code);
+    OnVerifyOtp.Broadcast(Phone, Code); // VALUE params
 }
