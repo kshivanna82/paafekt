@@ -46,6 +46,9 @@ void ULoginWidget::NativeOnInitialized()
         OtpBox->SetVisibility(ESlateVisibility::Collapsed);
         VerifyButton->SetVisibility(ESlateVisibility::Collapsed);
     }
+    
+    if (SendOtpLabel)  SendOtpLabel->SetText(FText::FromString(TEXT("Send OTP")));
+    if (VerifyLabel)   VerifyLabel->SetText(FText::FromString(TEXT("Verify")));
 
     if (SendOtpButton)
     {
@@ -74,12 +77,15 @@ void ULoginWidget::ShowOtpStep()
     // Show OTP controls
     if (OtpRow)
     {
-        OtpRow->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+//        OtpRow->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+        OtpRow->SetVisibility(ESlateVisibility::Visible);
     }
     else
     {
-        if (OtpBox)      OtpBox->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-        if (VerifyButton)VerifyButton->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+//        if (OtpBox)      OtpBox->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+//        if (VerifyButton)VerifyButton->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+        if (OtpBox)      OtpBox->SetVisibility(ESlateVisibility::Visible);
+        if (VerifyButton)VerifyButton->SetVisibility(ESlateVisibility::Visible);
     }
 }
 

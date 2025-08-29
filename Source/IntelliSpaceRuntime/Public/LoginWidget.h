@@ -3,14 +3,16 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/TextBlock.h" 
 #include "LoginWidget.generated.h"
 
 class UEditableTextBox;
 class UButton;
 class UPanelWidget; // for grouping/hiding OTP row (e.g., HorizontalBox/SizeBox/Canvas slot)
+class UTextBlock; 
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSendOtp,  const FString&, Phone);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnVerifyOtp, const FString&, Phone, const FString&, Code);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSendOtp, FString, Phone);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnVerifyOtp, FString, Phone, FString, Code);
 
 UCLASS()
 class INTELLISPACERUNTIME_API ULoginWidget : public UUserWidget
@@ -36,6 +38,10 @@ public:
     UPROPERTY(meta=(BindWidgetOptional)) UPanelWidget* OtpRow = nullptr;
     UPROPERTY(meta=(BindWidget)) UEditableTextBox* OtpBox = nullptr;
     UPROPERTY(meta=(BindWidget)) UButton*         VerifyButton = nullptr;
+    
+    // NEW: labels inside the buttons
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* SendOtpLabel = nullptr;
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* VerifyLabel  = nullptr;
 
     // Call to switch UI from “send” step to “otp verify” step
     UFUNCTION(BlueprintCallable) void ShowOtpStep();

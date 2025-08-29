@@ -1,142 +1,181 @@
 #include "LoginUIBoot.h"
-
+#include "LoginWidget.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
+#include "Blueprint/UserWidget.h" 
 #include "Components/EditableTextBox.h"
-#include "Components/PanelWidget.h"
-#include "Components/PanelSlot.h"
-#include "Components/VerticalBoxSlot.h"
-#include "Components/HorizontalBoxSlot.h"
-#include "Components/CanvasPanelSlot.h"
-
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
-#include "GameFramework/Pawn.h"                 // ✅ needed: APawn complete type
 #include "Engine/World.h"
+#include "Engine/Engine.h"
+#include "SegDecorActor.h"   // ASegDecorActor
 
-#include "SegDecorActor.h"
+UPROPERTY(meta=(BindWidget)) UEditableTextBox* PhoneBox = nullptr;
+UPROPERTY(meta=(BindWidget)) UEditableTextBox* OtpBox   = nullptr;
 
-// Small helper: try to set padding on whatever slot the widget lives in.
-static void TrySetSlotPadding(UWidget* Widget, const FMargin& Pad)
+UPROPERTY(meta=(BindWidget)) UButton* SendOtpButton = nullptr;
+UPROPERTY(meta=(BindWidget)) UButton* VerifyButton  = nullptr;
+
+// NEW: labels inside the buttons
+UPROPERTY(meta=(BindWidget)) UTextBlock* SendOtpLabel = nullptr;
+UPROPERTY(meta=(BindWidget)) UTextBlock* VerifyLabel  = nullptr;
+
+void ULoginUIBoot::Init(UWorld* World)
 {
-    if (!Widget || !Widget->Slot) return;
+    if (!World)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[LoginUIBoot] Init: World is null"));
+        return;
+    }
+    if (!LoginWidget)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[LoginUIBoot] Init: LoginWidgetClass not set"));
+        return;
+    }
+    if (LoginWidget && LoginWidget->IsInViewport())
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("[LoginUIBoot] Init: Widget already shown"));
+        return;
+    }
 
-    if (auto* V = Cast<UVerticalBoxSlot>(Widget->Slot)) { V->SetPadding(Pad); return; }
-    if (auto* H = Cast<UHorizontalBoxSlot>(Widget->Slot)) { H->SetPadding(Pad); return; }
-    if (auto* C = Cast<UCanvasPanelSlot>(Widget->Slot))   { C->SetAutoSize(true); /* Canvas uses Offsets, no padding */ }
-    // Add more slot types here if you use them (UniformGridSlot, GridSlot, etc.)
+    LoginWidget = CreateWidget<ULoginWidget>(World, LoginWidgetClass);
+    if (!LoginWidget)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[LoginUIBoot] Init: Failed to create widget"));
+        return;
+    }
+
+    // Bind C++ to widget dispatchers
+    LoginWidget->OnVerifyOtp.AddDynamic(this, &ULoginUIBoot::OnVerifyClicked);
+    LoginWidget->OnSendOtp.AddDynamic(this, &ULoginUIBoot::OnSendClicked);
+
+    LoginWidget->AddToViewport(1000);
+
+    // Focus UI
+    if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
+    {
+        PC->bShowMouseCursor = true;
+
+        FInputModeUIOnly Mode;
+        Mode.SetWidgetToFocus(LoginWidget->TakeWidget());
+        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        PC->SetInputMode(Mode);
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("[LoginUIBoot] Init: Widget shown and delegates bound"));
 }
-
-// Utility: make a simple colored brush for button states
-static FSlateBrush MakeFlatBrush(const FLinearColor& Tint)
-{
-    FSlateBrush Brush;
-    Brush.TintColor = FSlateColor(Tint);
-    Brush.DrawAs = ESlateBrushDrawType::Box;
-    Brush.Margin = FMargin(0.25f);
-    return Brush;
-}
-
 void ULoginUIBoot::NativeConstruct()
 {
     Super::NativeConstruct();
 
-    StyleTextBoxes();
-    StyleVerifyButton();
+    // Ensure the Verify button has a visible label.
+    EnsureVerifyLabel();
 
     if (VerifyButton)
     {
-        VerifyButton->OnClicked.RemoveAll(this);
         VerifyButton->OnClicked.AddDynamic(this, &ULoginUIBoot::OnVerifyClicked);
-    }
-
-    // ✅ set layout padding via slot (not on the text box itself)
-    TrySetSlotPadding(PhoneTextBox, FMargin(12.f, 8.f));
-    TrySetSlotPadding(OtpTextBox,   FMargin(12.f, 8.f));
-}
-
-void ULoginUIBoot::StyleTextBoxes()
-{
-    if (PhoneTextBox)
-    {
-        PhoneTextBox->SetHintText(FText::FromString(TEXT("Enter phone number")));
-        PhoneTextBox->SetIsPassword(false);
-        PhoneTextBox->WidgetStyle.ForegroundColor = FSlateColor(FLinearColor::White);
-        PhoneTextBox->WidgetStyle.BackgroundImageNormal  = MakeFlatBrush(FLinearColor(0.f,0.f,0.f,0.65f));
-        PhoneTextBox->WidgetStyle.BackgroundImageHovered = MakeFlatBrush(FLinearColor(0.05f,0.05f,0.05f,0.75f));
-        PhoneTextBox->WidgetStyle.BackgroundImageFocused = MakeFlatBrush(FLinearColor(0.0f,0.3f,0.0f,0.85f));
-    }
-
-    if (OtpTextBox)
-    {
-        OtpTextBox->SetHintText(FText::FromString(TEXT("Enter OTP")));
-        OtpTextBox->SetIsPassword(false);
-        OtpTextBox->WidgetStyle.ForegroundColor = FSlateColor(FLinearColor::White);
-        OtpTextBox->WidgetStyle.BackgroundImageNormal  = MakeFlatBrush(FLinearColor(0.f,0.f,0.f,0.65f));
-        OtpTextBox->WidgetStyle.BackgroundImageHovered = MakeFlatBrush(FLinearColor(0.05f,0.05f,0.05f,0.75f));
-        OtpTextBox->WidgetStyle.BackgroundImageFocused = MakeFlatBrush(FLinearColor(0.0f,0.3f,0.0f,0.85f));
-    }
-}
-
-void ULoginUIBoot::StyleVerifyButton()
-{
-    if (!VerifyButton) return;
-
-    FButtonStyle Btn;
-    Btn.SetNormal (MakeFlatBrush(FLinearColor(0.07f, 0.45f, 0.10f, 1.f)));
-    Btn.SetHovered(MakeFlatBrush(FLinearColor(0.12f, 0.60f, 0.18f, 1.f)));
-    Btn.SetPressed(MakeFlatBrush(FLinearColor(0.03f, 0.30f, 0.07f, 1.f)));
-    Btn.SetDisabled(MakeFlatBrush(FLinearColor(0.2f, 0.2f, 0.2f, 0.6f)));
-    Btn.SetNormalPadding (FMargin(8.f));
-    Btn.SetPressedPadding(FMargin(10.f, 6.f, 6.f, 10.f));
-
-    VerifyButton->SetStyle(Btn);
-    VerifyButton->SetIsEnabled(true);
-
-    if (VerifyLabel)
-    {
-        VerifyLabel->SetText(FText::FromString(TEXT("Verify")));
-        VerifyLabel->SetJustification(ETextJustify::Center);
-        VerifyLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-        FSlateFontInfo FontInfo = VerifyLabel->GetFont();
-        FontInfo.Size = 22;
-        FontInfo.TypefaceFontName = FName("Bold");
-        VerifyLabel->SetFont(FontInfo);
-    }
-}
-
-void ULoginUIBoot::OnVerifyClicked()
-{
-    const bool bHasPhone = PhoneTextBox && !PhoneTextBox->GetText().IsEmpty();
-    const bool bHasOtp   = OtpTextBox   && !OtpTextBox->GetText().IsEmpty();
-    if (!bHasPhone || !bHasOtp)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ Phone/OTP missing."));
-        return;
-    }
-
-    UWorld* World = GetWorld();
-    if (!World) return;
-
-    APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
-    if (!PC) return;
-
-    AActor* Found = UGameplayStatics::GetActorOfClass(World, ASegDecorActor::StaticClass());
-    if (!Found)
-    {
-        UE_LOG(LogTemp, Error, TEXT("SegDecorActor not found in level."));
-        return;
-    }
-
-    // ✅ now APawn is a complete type, so this Cast compiles
-    if (APawn* AsPawn = Cast<APawn>(Found))
-    {
-        PC->Possess(AsPawn);
-        UE_LOG(LogTemp, Log, TEXT("✅ Possessed SegDecorActor Pawn."));
     }
     else
     {
-        PC->SetViewTargetWithBlend(Found, 0.5f);
-        UE_LOG(LogTemp, Log, TEXT("✅ Switched view to SegDecorActor."));
+        UE_LOG(LogTemp, Error, TEXT("[LoginUIBoot] VerifyButton is null. BindWidgetOptional not found in designer."));
+    }
+}
+
+void ULoginUIBoot::EnsureVerifyLabel()
+{
+    if (!VerifyButton)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[LoginUIBoot] EnsureVerifyLabel skipped: VerifyButton is null."));
+        return;
+    }
+
+    if (!VerifyLabel)
+    {
+        // Create a TextBlock and make it the content of the button so the label always shows.
+        VerifyLabel = NewObject<UTextBlock>(VerifyButton, UTextBlock::StaticClass());
+        VerifyLabel->SetText(FText::FromString(TEXT("Verify OTP")));
+        VerifyLabel->SetJustification(ETextJustify::Center);
+
+        // Style a bit
+        FSlateFontInfo FontInfo = VerifyLabel->GetFont();
+        FontInfo.Size = 22;
+        VerifyLabel->SetFont(FontInfo);
+        VerifyLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+
+        // UButton is a UContentWidget → we can assign the content directly.
+        VerifyButton->SetContent(VerifyLabel);
+        UE_LOG(LogTemp, Log, TEXT("[LoginUIBoot] Injected VerifyLabel into VerifyButton."));
+    }
+    else
+    {
+        // Ensure correct caption in case designer text was blank.
+        VerifyLabel->SetText(FText::FromString(TEXT("Verify OTP")));
+    }
+}
+
+void ULoginUIBoot::OnSendClicked(FString Phone)
+{
+    UE_LOG(LogTemp, Log, TEXT("[LoginUIBoot] Send OTP: %s"), *Phone);
+}
+
+void ULoginUIBoot::OnVerifyClicked(FString Phone, FString Code)
+{
+    UE_LOG(LogTemp, Log, TEXT("[LoginUIBoot] Verify: Phone=%s Code=%s"), *Phone, *Code);
+    NavigateToSegDecor();
+}
+
+void ULoginUIBoot::NavigateToSegDecor()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[LoginUIBoot] No World in NavigateToSegDecor."));
+        return;
+    }
+
+    // Remove login UI
+    RemoveFromParent();
+
+    // Restore game input
+    if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+    {
+        FInputModeGameOnly GameInput;
+        PC->SetInputMode(GameInput);
+        PC->bShowMouseCursor = false;
+    }
+
+    // Resolve target class (BP override if provided, otherwise hard-coded ASegDecorActor)
+    UClass* TargetClass = SegDecorActorOverrideClass
+        ? SegDecorActorOverrideClass.Get()
+        : ASegDecorActor::StaticClass();
+
+
+    if (!TargetClass)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[LoginUIBoot] Target SegDecor class is null."));
+        return;
+    }
+
+    // Find existing SegDecorActor
+    AActor* Target = UGameplayStatics::GetActorOfClass(World, TargetClass);
+    if (!Target)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[LoginUIBoot] SegDecorActor not found; spawning one..."));
+        FActorSpawnParameters Params;
+        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+        Target = World->SpawnActor<AActor>(TargetClass, SegDecorSpawnTransform, Params);
+        if (!Target)
+        {
+            UE_LOG(LogTemp, Error, TEXT("[LoginUIBoot] Failed to spawn SegDecorActor."));
+            return;
+        }
+    }
+
+    // Switch view to the actor
+    if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+    {
+        PC->SetViewTargetWithBlend(Target, /*BlendTime=*/0.5f);
+        UE_LOG(LogTemp, Log, TEXT("[LoginUIBoot] ✅ Switched view to SegDecorActor."));
     }
 }
