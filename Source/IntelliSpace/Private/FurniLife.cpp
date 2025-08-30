@@ -158,6 +158,14 @@ void AFurniLife::BeginPlay()
 {
     Super::BeginPlay();
     UE_LOG(LogTemp, Warning, TEXT("Returned from Super::BeginPlay()"));
+    
+    // Only start camera if we're in the actual FurniLife gameplay level
+    FString LevelName = GetWorld()->GetMapName();
+    if (LevelName.Contains("Login") || !LevelName.Contains("FurniLife"))
+    {
+        UE_LOG(LogTemp, Log, TEXT("FurniLife actor in login level - skipping camera setup"));
+        return;
+    }
 
     AFurniLife::CurrentInstance = this;
     cap.open(CameraID);

@@ -232,12 +232,12 @@ public class IntelliSpace : ModuleRules
 
         	PublicDependencyModuleNames.AddRange(new string[]
             {
-                    "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate", "Projects", "CinematicCamera"
+                    "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate", "Projects", "CinematicCamera", "UMG", "Slate", "SlateCore", "Json"
             });
 
             PrivateDependencyModuleNames.AddRange(new string[]
             {
-                    "Core", "CoreUObject", "Engine", "Renderer", "RenderCore", "RHI", "RHICore", "Projects"
+                    "Core", "CoreUObject", "Engine", "Renderer", "RenderCore", "RHI", "RHICore", "Projects", "ToolMenus", "EditorStyle", "EditorWidgets", "HTTP", "WebBrowser"
             });
 	}
 }
