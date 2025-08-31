@@ -432,6 +432,35 @@ void ULoginWidget::OnOtpSent(FHttpRequestPtr Request, FHttpResponsePtr Response,
     }
 }
 
+//void ULoginWidget::OnOtpVerified(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+//{
+//    // FOR TESTING: Always succeed
+//    bWasSuccessful = true;
+//    
+//    if (!bWasSuccessful)
+//    {
+//        ShowMessage("Failed to verify OTP. Please try again.", FLinearColor::Red);
+//        if (VerifyButton)
+//        {
+//            VerifyButton->SetIsEnabled(true);
+//        }
+//        return;
+//    }
+//    
+//    ShowMessage("Login successful! Loading IntelliSpace...", FLinearColor::Green);
+//    OnLoginSuccess("test_token");
+//    
+//    // Remove the widget from viewport BEFORE changing levels
+//    RemoveFromParent();
+//    
+//    FTimerHandle TimerHandle;
+//    GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
+//    {
+//        // Open IntelliSpaceMap
+//        UGameplayStatics::OpenLevel(GetWorld(), "IntelliSpaceMap");
+//    }, 0.5f, false);
+//}
+
 void ULoginWidget::OnOtpVerified(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 {
     // FOR TESTING: Always succeed
@@ -440,19 +469,20 @@ void ULoginWidget::OnOtpVerified(FHttpRequestPtr Request, FHttpResponsePtr Respo
     if (!bWasSuccessful)
     {
         ShowMessage("Failed to verify OTP. Please try again.", FLinearColor::Red);
-        VerifyButton->SetIsEnabled(true);
+        if (VerifyButton)
+        {
+            VerifyButton->SetIsEnabled(true);
+        }
         return;
     }
     
     ShowMessage("Login successful! Loading IntelliSpace...", FLinearColor::Green);
-    OnLoginSuccess("test_token");
     
-    FTimerHandle TimerHandle;
-    GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
-    {
-        // Open IntelliSpaceMap instead of MainMenu
-        UGameplayStatics::OpenLevel(GetWorld(), "IntelliSpaceMap");
-    }, 1.5f, false);
+    // Clean up the widget completely
+    RemoveFromParent();
+    
+    // Open level with ABSOLUTE transition (replaces everything)
+    UGameplayStatics::OpenLevel(GetWorld(), TEXT("/Game/IntelliSpaceMap"), true);
 }
 
 void ULoginWidget::OnOtpExpired()

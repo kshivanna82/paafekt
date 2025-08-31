@@ -5,7 +5,7 @@ public class IntelliSpaceTarget : TargetRules
     {
         Type = TargetType.Game;
         DefaultBuildSettings = BuildSettingsVersion.V5;
-        ExtraModuleNames.AddRange(new string[] { "IntelliSpaceRuntime" });
+        ExtraModuleNames.AddRange(new string[] { "IntelliSpace" });
         
         if (Target.Platform == UnrealTargetPlatform.IOS || Target.Platform == UnrealTargetPlatform.Android)
         {

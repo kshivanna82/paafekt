@@ -23,16 +23,34 @@ void ALoginActor::BeginPlay()
         Auth = GI->GetSubsystem<UAuthSubsystem>();
     }
     
-    // ALWAYS SHOW LOGIN UI FOR TESTING
-    UE_LOG(LogTemp, Warning, TEXT("[Login] Forcing login UI to show (Auth exists: %s)"), Auth ? TEXT("YES") : TEXT("NO"));
-    ShowLoginUI();
-    
-    // Bind auth events if Auth exists
-    if (Auth)
+    if (!Auth)
     {
-        Auth->OnOtpStarted.AddDynamic(this, &ALoginActor::OnOtpStarted);
-        Auth->OnOtpVerified.AddDynamic(this, &ALoginActor::OnOtpVerified);
+        UE_LOG(LogTemp, Error, TEXT("[Login] AuthSubsystem missing"));
+        // Skip login and go straight to FurniLife
+        SpawnFurniLife();
+        return;
     }
+    
+    // Bind auth events
+    Auth->OnOtpStarted.AddDynamic(this, &ALoginActor::OnOtpStarted);
+    Auth->OnOtpVerified.AddDynamic(this, &ALoginActor::OnOtpVerified);
+    
+    // FORCE SHOW LOGIN FOR TESTING - Comment this section back in when auth is working
+    /*
+    if (Auth->IsLoggedIn())
+    {
+        UE_LOG(LogTemp, Log, TEXT("[Login] Already logged in - going to FurniLife"));
+        SpawnFurniLife();
+    }
+    else
+    {
+        ShowLoginUI();
+    }
+    */
+    
+    // ALWAYS SHOW LOGIN FOR NOW
+    UE_LOG(LogTemp, Warning, TEXT("[Login] Forcing login UI to show for testing"));
+    ShowLoginUI();
 }
 
 void ALoginActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -83,7 +101,7 @@ void ALoginActor::ShowLoginUI()
     PC->SetInputMode(InputMode);
     PC->bShowMouseCursor = true;
     
-    UE_LOG(LogTemp, Log, TEXT("[Login] Login UI shown"));
+    UE_LOG(LogTemp, Warning, TEXT("[Login] Login UI shown successfully"));
 }
 
 void ALoginActor::HideLoginUI()
@@ -201,8 +219,15 @@ void ALoginActor::OnOtpVerified(bool bSuccess)
     {
         UE_LOG(LogTemp, Log, TEXT("[Login] OTP verified successfully - transitioning to FurniLife"));
         
-        // Go to FurniLife
-        SpawnFurniLife();
+        // Hide and destroy login UI before transitioning
+        HideLoginUI();
+        
+        // Give a moment for UI to clean up, then spawn FurniLife
+        FTimerHandle TransitionTimer;
+        GetWorld()->GetTimerManager().SetTimer(TransitionTimer, [this]()
+        {
+            SpawnFurniLife();
+        }, 0.5f, false);
     }
     else
     {
