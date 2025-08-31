@@ -232,7 +232,7 @@ public class IntelliSpace : ModuleRules
 
         	PublicDependencyModuleNames.AddRange(new string[]
             {
-                    "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate", "Projects", "CinematicCamera", "UMG", "Slate", "SlateCore", "Json"
+                    "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate", "Projects", "CinematicCamera", "UMG", "Slate", "SlateCore", "Json", "HTTP"
             });
 
             PrivateDependencyModuleNames.AddRange(new string[]
