@@ -79,15 +79,24 @@ void ULoginWidget::SetupUIElements()
         FText HintText = PhoneBox->GetHintText();
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: PhoneBox hint text = '%s'"), *HintText.ToString());
         
-        // Set colors
+        // Set colors for visibility
         PhoneBox->SetForegroundColor(FLinearColor::Black);
         
         // Try to modify the style for background
         FEditableTextBoxStyle NewStyle = PhoneBox->WidgetStyle;
+        
+        // Create a light gray background
         FSlateBrush BackgroundBrush;
         BackgroundBrush.TintColor = FSlateColor(FLinearColor(0.95f, 0.95f, 0.95f, 1.0f));
         BackgroundBrush.DrawAs = ESlateBrushDrawType::Box;
+        BackgroundBrush.Margin = FMargin(4.0f);
+        
         NewStyle.BackgroundImageNormal = BackgroundBrush;
+        NewStyle.BackgroundImageHovered = BackgroundBrush;
+        NewStyle.BackgroundImageFocused = BackgroundBrush;
+        NewStyle.BackgroundImageReadOnly = BackgroundBrush;
+        
+        // Set the style
         PhoneBox->WidgetStyle = NewStyle;
         
         PhoneBox->SetIsReadOnly(false);
@@ -106,6 +115,9 @@ void ULoginWidget::SetupUIElements()
     {
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: Configuring OtpBox"));
         
+        // INITIALLY HIDE THE OTP BOX
+        OtpBox->SetVisibility(ESlateVisibility::Collapsed);
+        
         // Set hint text - THIS FIXES THE WHITE RECTANGLE
         OtpBox->SetHintText(FText::FromString("Enter 6-digit OTP"));
         
@@ -113,18 +125,27 @@ void ULoginWidget::SetupUIElements()
         FText HintText = OtpBox->GetHintText();
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: OtpBox hint text = '%s'"), *HintText.ToString());
         
-        // Set colors
+        // Set colors for visibility
         OtpBox->SetForegroundColor(FLinearColor::Black);
         
         // Try to modify the style for background
         FEditableTextBoxStyle NewStyle = OtpBox->WidgetStyle;
+        
+        // Create a light gray background
         FSlateBrush BackgroundBrush;
         BackgroundBrush.TintColor = FSlateColor(FLinearColor(0.95f, 0.95f, 0.95f, 1.0f));
         BackgroundBrush.DrawAs = ESlateBrushDrawType::Box;
+        BackgroundBrush.Margin = FMargin(4.0f);
+        
         NewStyle.BackgroundImageNormal = BackgroundBrush;
+        NewStyle.BackgroundImageHovered = BackgroundBrush;
+        NewStyle.BackgroundImageFocused = BackgroundBrush;
+        NewStyle.BackgroundImageReadOnly = BackgroundBrush;
+        
+        // Set the style
         OtpBox->WidgetStyle = NewStyle;
         
-        OtpBox->SetIsPassword(true);
+        OtpBox->SetIsPassword(false);  // Changed to false so user can see the OTP they enter
         OtpBox->SetIsReadOnly(false);
         OtpBox->OnTextChanged.AddDynamic(this, &ULoginWidget::OnOtpTextChanged);
         
@@ -147,6 +168,7 @@ void ULoginWidget::SetupUIElements()
     {
         OtpLabel->SetText(FText::FromString("OTP Code:"));
         OtpLabel->SetColorAndOpacity(FLinearColor(0.8f, 0.8f, 0.8f, 1.0f));
+        OtpLabel->SetVisibility(ESlateVisibility::Collapsed); // Initially hidden
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: OtpLabel configured"));
     }
     
@@ -160,12 +182,17 @@ void ULoginWidget::SetupUIElements()
         }
         FButtonStyle ButtonStyle = SendOtpButton->GetStyle();
         ButtonStyle.Normal.TintColor = FLinearColor(0.0f, 0.52f, 1.0f, 1.0f);
+        ButtonStyle.Hovered.TintColor = FLinearColor(0.3f, 0.64f, 1.0f, 1.0f);
+        ButtonStyle.Pressed.TintColor = FLinearColor(0.0f, 0.4f, 0.8f, 1.0f);
         SendOtpButton->SetStyle(ButtonStyle);
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: SendOtpButton configured"));
     }
     
     if (VerifyButton)
     {
+        // INITIALLY HIDE THE VERIFY BUTTON
+        VerifyButton->SetVisibility(ESlateVisibility::Collapsed);
+        
         if (UTextBlock* ButtonText = Cast<UTextBlock>(VerifyButton->GetChildAt(0)))
         {
             ButtonText->SetText(FText::FromString("VERIFY & LOGIN"));
@@ -173,8 +200,28 @@ void ULoginWidget::SetupUIElements()
         }
         FButtonStyle ButtonStyle = VerifyButton->GetStyle();
         ButtonStyle.Normal.TintColor = FLinearColor(0.16f, 0.65f, 0.27f, 1.0f);
+        ButtonStyle.Hovered.TintColor = FLinearColor(0.36f, 0.75f, 0.46f, 1.0f);
+        ButtonStyle.Pressed.TintColor = FLinearColor(0.12f, 0.49f, 0.20f, 1.0f);
+        ButtonStyle.Disabled.TintColor = FLinearColor(0.5f, 0.5f, 0.5f, 0.5f);
         VerifyButton->SetStyle(ButtonStyle);
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: VerifyButton configured"));
+    }
+    
+    if (TitleText)
+    {
+        TitleText->SetText(FText::FromString("INTELLISPACE LOGIN"));
+        FSlateFontInfo TitleFont = TitleText->GetFont();
+        TitleFont.Size = 28;
+        TitleText->SetFont(TitleFont);
+        TitleText->SetColorAndOpacity(FLinearColor::White);
+        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: TitleText configured"));
+    }
+    
+    if (StatusText)
+    {
+        StatusText->SetText(FText::GetEmpty());
+        StatusText->SetColorAndOpacity(FLinearColor::Yellow);
+        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: StatusText configured"));
     }
     
     UE_LOG(LogTemp, Warning, TEXT("LoginWidget: SetupUIElements complete"));
@@ -255,7 +302,16 @@ void ULoginWidget::OnSendOtpClicked()
     ShowMessage("Sending OTP...", FLinearColor::Yellow);
     SendOtpButton->SetIsEnabled(false);
     CurrentPhoneNumber = PhoneNumber;
-    SendOtpRequest(PhoneNumber);
+    
+    // FOR TESTING: Simulate successful OTP send
+    FTimerHandle TestTimer;
+    GetWorld()->GetTimerManager().SetTimer(TestTimer, [this]()
+    {
+        OnOtpSent(nullptr, nullptr, true);
+    }, 1.0f, false);
+    
+    // Real implementation would call:
+    // SendOtpRequest(PhoneNumber);
 }
 
 void ULoginWidget::OnVerifyClicked()
@@ -275,7 +331,16 @@ void ULoginWidget::OnVerifyClicked()
     
     ShowMessage("Verifying OTP...", FLinearColor::Yellow);
     VerifyButton->SetIsEnabled(false);
-    VerifyOtpRequest(PhoneNumber, OtpCode);
+    
+    // FOR TESTING: Accept any 6-digit code
+    FTimerHandle TestTimer;
+    GetWorld()->GetTimerManager().SetTimer(TestTimer, [this]()
+    {
+        OnOtpVerified(nullptr, nullptr, true);
+    }, 1.0f, false);
+    
+    // Real implementation would call:
+    // VerifyOtpRequest(PhoneNumber, OtpCode);
 }
 
 bool ULoginWidget::ValidatePhoneNumber(const FString& PhoneNumber)
@@ -334,90 +399,57 @@ void ULoginWidget::VerifyOtpRequest(const FString& PhoneNumber, const FString& O
 
 void ULoginWidget::OnOtpSent(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 {
-    if (!bWasSuccessful || !Response.IsValid())
+    // FOR TESTING: Always succeed
+    bWasSuccessful = true;
+    
+    if (!bWasSuccessful)
     {
         ShowMessage("Failed to send OTP. Please try again.", FLinearColor::Red);
         SendOtpButton->SetIsEnabled(true);
         return;
     }
     
-    int32 ResponseCode = Response->GetResponseCode();
-    if (ResponseCode == 200)
+    bIsOtpSent = true;
+    ShowMessage("OTP sent! (Testing: Enter any 6 digits)", FLinearColor::Green);
+    
+    if (VerifyButton) VerifyButton->SetIsEnabled(true);
+    if (OtpBox)
     {
-        bIsOtpSent = true;
-        ShowMessage("OTP sent successfully! Please check your phone.", FLinearColor::Green);
-        
-        if (VerifyButton) VerifyButton->SetIsEnabled(true);
-        if (OtpBox)
-        {
-            OtpBox->SetIsEnabled(true);
-            OtpBox->SetKeyboardFocus();
-        }
-        
-        GetWorld()->GetTimerManager().SetTimer(OtpExpiryTimer, this, &ULoginWidget::OnOtpExpired, OtpExpiryTime, false);
-        
-        if (UTextBlock* ButtonText = Cast<UTextBlock>(SendOtpButton->GetChildAt(0)))
-        {
-            ButtonText->SetText(FText::FromString("RESEND OTP"));
-        }
-        SendOtpButton->SetIsEnabled(true);
-        
-        ShowOtpStep();
+        OtpBox->SetIsEnabled(true);
+        OtpBox->SetKeyboardFocus();
     }
-    else
+    
+    GetWorld()->GetTimerManager().SetTimer(OtpExpiryTimer, this, &ULoginWidget::OnOtpExpired, OtpExpiryTime, false);
+    
+    if (UTextBlock* ButtonText = Cast<UTextBlock>(SendOtpButton->GetChildAt(0)))
     {
-        ShowMessage("Error sending OTP. Please check your phone number.", FLinearColor::Red);
-        SendOtpButton->SetIsEnabled(true);
+        ButtonText->SetText(FText::FromString("RESEND OTP"));
     }
+    SendOtpButton->SetIsEnabled(true);
+    
+    ShowOtpStep();
 }
 
 void ULoginWidget::OnOtpVerified(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 {
-    if (!bWasSuccessful || !Response.IsValid())
+    // FOR TESTING: Always succeed
+    bWasSuccessful = true;
+    
+    if (!bWasSuccessful)
     {
         ShowMessage("Failed to verify OTP. Please try again.", FLinearColor::Red);
         VerifyButton->SetIsEnabled(true);
         return;
     }
     
-    int32 ResponseCode = Response->GetResponseCode();
-    if (ResponseCode == 200)
+    ShowMessage("Login successful! Welcome to IntelliSpace!", FLinearColor::Green);
+    OnLoginSuccess("test_token");
+    
+    FTimerHandle TimerHandle;
+    GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
     {
-        FString ResponseBody = Response->GetContentAsString();
-        TSharedPtr<FJsonObject> JsonObject;
-        TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseBody);
-        
-        if (FJsonSerializer::Deserialize(Reader, JsonObject))
-        {
-            FString AuthToken;
-            if (JsonObject->TryGetStringField(TEXT("token"), AuthToken))
-            {
-                StoreAuthToken(AuthToken);
-                ShowMessage("Login successful! Welcome to IntelliSpace!", FLinearColor::Green);
-                OnLoginSuccess(AuthToken);
-                
-                FTimerHandle TimerHandle;
-                GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
-                {
-                    UGameplayStatics::OpenLevel(GetWorld(), "MainMenu");
-                }, 1.5f, false);
-            }
-        }
-    }
-    else if (ResponseCode == 401)
-    {
-        ShowMessage("Invalid OTP. Please try again.", FLinearColor::Red);
-        VerifyButton->SetIsEnabled(true);
-        OtpBox->SetText(FText::GetEmpty());
-        OtpBox->SetKeyboardFocus();
-        OnLoginFailed("Invalid OTP");
-    }
-    else
-    {
-        ShowMessage("Verification failed. Please try again.", FLinearColor::Red);
-        VerifyButton->SetIsEnabled(true);
-        OnLoginFailed("Verification failed");
-    }
+        UGameplayStatics::OpenLevel(GetWorld(), "MainMenu");
+    }, 1.5f, false);
 }
 
 void ULoginWidget::OnOtpExpired()
@@ -431,6 +463,8 @@ void ULoginWidget::OnOtpExpired()
 
 void ULoginWidget::ShowMessage(const FString& Message, const FLinearColor& Color)
 {
+    UE_LOG(LogTemp, Warning, TEXT("LoginWidget: Message - %s"), *Message);
+    
     if (StatusText)
     {
         StatusText->SetText(FText::FromString(Message));
