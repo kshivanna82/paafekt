@@ -405,29 +405,31 @@ void ULoginWidget::OnOtpSent(FHttpRequestPtr Request, FHttpResponsePtr Response,
     if (!bWasSuccessful)
     {
         ShowMessage("Failed to send OTP. Please try again.", FLinearColor::Red);
-        SendOtpButton->SetIsEnabled(true);
+        if (SendOtpButton)
+        {
+            SendOtpButton->SetIsEnabled(true);
+        }
         return;
     }
     
     bIsOtpSent = true;
-    ShowMessage("OTP sent! (Testing: Enter any 6 digits)", FLinearColor::Green);
+    ShowMessage("OTP sent! Enter the 6-digit code", FLinearColor::Green);
     
-    if (VerifyButton) VerifyButton->SetIsEnabled(true);
-    if (OtpBox)
-    {
-        OtpBox->SetIsEnabled(true);
-        OtpBox->SetKeyboardFocus();
-    }
+    // Show OTP step - this handles showing OTP box and verify button
+    ShowOtpStep();
     
+    // Start expiry timer
     GetWorld()->GetTimerManager().SetTimer(OtpExpiryTimer, this, &ULoginWidget::OnOtpExpired, OtpExpiryTime, false);
     
-    if (UTextBlock* ButtonText = Cast<UTextBlock>(SendOtpButton->GetChildAt(0)))
+    // Change button text to RESEND
+    if (SendOtpButton)
     {
-        ButtonText->SetText(FText::FromString("RESEND OTP"));
+        if (UTextBlock* ButtonText = Cast<UTextBlock>(SendOtpButton->GetChildAt(0)))
+        {
+            ButtonText->SetText(FText::FromString("RESEND OTP"));
+        }
+        SendOtpButton->SetIsEnabled(true);
     }
-    SendOtpButton->SetIsEnabled(true);
-    
-    ShowOtpStep();
 }
 
 void ULoginWidget::OnOtpVerified(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
@@ -442,13 +444,14 @@ void ULoginWidget::OnOtpVerified(FHttpRequestPtr Request, FHttpResponsePtr Respo
         return;
     }
     
-    ShowMessage("Login successful! Welcome to IntelliSpace!", FLinearColor::Green);
+    ShowMessage("Login successful! Loading IntelliSpace...", FLinearColor::Green);
     OnLoginSuccess("test_token");
     
     FTimerHandle TimerHandle;
     GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
     {
-        UGameplayStatics::OpenLevel(GetWorld(), "MainMenu");
+        // Open IntelliSpaceMap instead of MainMenu
+        UGameplayStatics::OpenLevel(GetWorld(), "IntelliSpaceMap");
     }, 1.5f, false);
 }
 
@@ -502,16 +505,28 @@ void ULoginWidget::ResetLoginForm()
 
 void ULoginWidget::ShowOtpStep()
 {
-    UE_LOG(LogTemp, Warning, TEXT("LoginWidget: ShowOtpStep called"));
+    UE_LOG(LogTemp, Warning, TEXT("LoginWidget: ShowOtpStep called - Showing OTP input"));
     
+    // Show OTP box and label
     if (OtpBox)
     {
         OtpBox->SetVisibility(ESlateVisibility::Visible);
+        OtpBox->SetIsEnabled(true);
         OtpBox->SetKeyboardFocus();
+        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: OtpBox made visible and focused"));
     }
     
     if (OtpLabel)
     {
         OtpLabel->SetVisibility(ESlateVisibility::Visible);
+        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: OtpLabel made visible"));
+    }
+    
+    // Show verify button
+    if (VerifyButton)
+    {
+        VerifyButton->SetVisibility(ESlateVisibility::Visible);
+        VerifyButton->SetIsEnabled(true);
+        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: VerifyButton made visible and enabled"));
     }
 }
