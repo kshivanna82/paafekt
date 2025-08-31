@@ -723,24 +723,24 @@ void AFurniLife::ApplySegmentationMask()
         {
             uchar alpha = alphaMask.at<uchar>(y, x);
             cv::Vec4b& px = frame.at<cv::Vec4b>(y, x);
-//            px[3] = (alpha < 64) ? 0 : alpha;
+            px[3] = (alpha < 32) ? 0 : alpha;
 //            px[3] = alpha;
 //            px[3] = 255;
 //            if (alpha < 64)  // Background
 //            int Threshold = FMath::Clamp((int)(maxVal * 0.5), 10, 64);
 
 //            UE_LOG(LogTemp, Warning, TEXT("in if of Thre-sholdDDDDDDDDDD : %d"), Threshold);
-            if (alpha < 32)
-            {
-                px[0] = 0;     // B
-                px[1] = 255;   // G
-                px[2] = 0;     // R
-                px[3] = 255;   // Full alpha (opaque)
-            }
-            else  // Foreground
-            {
-                px[3] = 255;  // Ensure fully opaque
-            }
+//            if (alpha < 32)
+//            {
+//                px[0] = 0;     // B
+//                px[1] = 255;   // G
+//                px[2] = 0;     // R
+//                px[3] = 255;   // Full alpha (opaque)
+//            }
+//            else  // Foreground
+//            {
+//                px[3] = 255;  // Ensure fully opaque
+//            }
         }
     }
     
