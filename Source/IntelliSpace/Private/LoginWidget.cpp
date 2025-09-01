@@ -448,7 +448,7 @@ void ULoginWidget::OnOtpSent(FHttpRequestPtr Request, FHttpResponsePtr Response,
     ShowOtpStep();
     
     // Start expiry timer
-    GetWorld()->GetTimerManager().SetTimer(OtpExpiryTimer, this, &ULoginWidget::OnOtpExpired, OtpExpiryTime, false);
+//    GetWorld()->GetTimerManager().SetTimer(OtpExpiryTimer, this, &ULoginWidget::OnOtpExpired, OtpExpiryTime, false);
     
     // Change button text to RESEND
     if (SendOtpButton)
@@ -485,36 +485,36 @@ void ULoginWidget::OnOtpVerified(FHttpRequestPtr Request, FHttpResponsePtr Respo
     UGameplayStatics::OpenLevel(GetWorld(), TEXT("/Game/IntelliSpaceMap"), true);
 }
 
-void ULoginWidget::OnOtpExpired()
-{
-    bIsOtpSent = false;
-    ShowMessage("OTP has expired. Please request a new one.", FLinearColor(1.0f, 0.5f, 0.0f, 1.0f));
-    
-    // Hide OTP-related UI elements
-    if (VerifyButton)
-    {
-        VerifyButton->SetIsEnabled(false);
-        VerifyButton->SetVisibility(ESlateVisibility::Collapsed);
-    }
-    if (OtpBox)
-    {
-        OtpBox->SetText(FText::GetEmpty());
-        OtpBox->SetVisibility(ESlateVisibility::Collapsed);
-    }
-    if (OtpLabel)
-    {
-        OtpLabel->SetVisibility(ESlateVisibility::Collapsed);
-    }
-    
-    // Reset Send OTP button text
-    if (SendOtpButton)
-    {
-        if (UTextBlock* ButtonText = Cast<UTextBlock>(SendOtpButton->GetChildAt(0)))
-        {
-            ButtonText->SetText(FText::FromString("SEND OTP"));
-        }
-    }
-}
+//void ULoginWidget::OnOtpExpired()
+//{
+//    bIsOtpSent = false;
+//    ShowMessage("OTP has expired. Please request a new one.", FLinearColor(1.0f, 0.5f, 0.0f, 1.0f));
+//    
+//    // Hide OTP-related UI elements
+//    if (VerifyButton)
+//    {
+//        VerifyButton->SetIsEnabled(false);
+//        VerifyButton->SetVisibility(ESlateVisibility::Collapsed);
+//    }
+//    if (OtpBox)
+//    {
+//        OtpBox->SetText(FText::GetEmpty());
+//        OtpBox->SetVisibility(ESlateVisibility::Collapsed);
+//    }
+//    if (OtpLabel)
+//    {
+//        OtpLabel->SetVisibility(ESlateVisibility::Collapsed);
+//    }
+//    
+//    // Reset Send OTP button text
+//    if (SendOtpButton)
+//    {
+//        if (UTextBlock* ButtonText = Cast<UTextBlock>(SendOtpButton->GetChildAt(0)))
+//        {
+//            ButtonText->SetText(FText::FromString("SEND OTP"));
+//        }
+//    }
+//}
 
 void ULoginWidget::ShowMessage(const FString& Message, const FLinearColor& Color)
 {
