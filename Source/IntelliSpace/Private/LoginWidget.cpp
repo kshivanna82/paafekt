@@ -57,9 +57,10 @@ void ULoginWidget::NativeConstruct()
     {
         VerifyButton->OnClicked.RemoveAll(this);  // Remove any existing bindings from this object
         VerifyButton->OnClicked.AddDynamic(this, &ULoginWidget::OnVerifyClicked);
-        VerifyButton->SetIsEnabled(true);
-        VerifyButton->SetVisibility(ESlateVisibility::Visible);
-        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: VerifyButton click event bound, initially disabled"));
+        // KEEP VERIFY BUTTON HIDDEN INITIALLY
+        VerifyButton->SetIsEnabled(false);
+        VerifyButton->SetVisibility(ESlateVisibility::Collapsed);
+        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: VerifyButton click event bound, initially hidden"));
     }
     
     if (PhoneBox)
@@ -205,7 +206,8 @@ void ULoginWidget::SetupUIElements()
         ButtonStyle.Hovered.TintColor = FLinearColor(0.3f, 0.64f, 1.0f, 1.0f);
         ButtonStyle.Pressed.TintColor = FLinearColor(0.0f, 0.4f, 0.8f, 1.0f);
         SendOtpButton->SetStyle(ButtonStyle);
-        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: SendOtpButton configured"));
+        SendOtpButton->SetIsEnabled(false);  // Initially disabled until valid phone number is entered
+        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: SendOtpButton configured, initially disabled"));
     }
     
     if (VerifyButton)
@@ -272,7 +274,10 @@ void ULoginWidget::OnPhoneTextChanged(const FText& Text)
     
     if (SendOtpButton)
     {
-        SendOtpButton->SetIsEnabled(CleanNumber.Len() == 10);
+        bool bIsValidLength = (CleanNumber.Len() == 10);
+        SendOtpButton->SetIsEnabled(bIsValidLength);
+        UE_LOG(LogTemp, VeryVerbose, TEXT("Phone number length: %d, SendOtp enabled: %s"),
+               CleanNumber.Len(), bIsValidLength ? TEXT("true") : TEXT("false"));
     }
 }
 
@@ -280,11 +285,6 @@ void ULoginWidget::OnOtpTextChanged(const FText& Text)
 {
     FString OtpCode = Text.ToString();
     
-    // Ensure widgets stay visible
-    if (OtpBox)
-        OtpBox->SetVisibility(ESlateVisibility::Visible);
-    if (VerifyButton)
-        VerifyButton->SetVisibility(ESlateVisibility::Visible);
     FString CleanOtp;
     for (TCHAR Char : OtpCode)
     {
@@ -304,10 +304,14 @@ void ULoginWidget::OnOtpTextChanged(const FText& Text)
         OtpBox->SetText(FText::FromString(CleanOtp));
     }
     
-    if (CleanOtp.Len() == 6 && bIsOtpSent)
+    // Enable/Disable verify button based on OTP length
+    if (VerifyButton && bIsOtpSent)
     {
-        OnVerifyClicked();
+        VerifyButton->SetIsEnabled(CleanOtp.Len() == 6);
     }
+    
+    // REMOVED: Auto-verify when 6 digits are entered
+    // User must click the Verify button manually
 }
 
 void ULoginWidget::OnSendOtpClicked()
@@ -486,8 +490,30 @@ void ULoginWidget::OnOtpExpired()
     bIsOtpSent = false;
     ShowMessage("OTP has expired. Please request a new one.", FLinearColor(1.0f, 0.5f, 0.0f, 1.0f));
     
-    if (VerifyButton) VerifyButton->SetIsEnabled(false);
-    if (OtpBox) OtpBox->SetText(FText::GetEmpty());
+    // Hide OTP-related UI elements
+    if (VerifyButton)
+    {
+        VerifyButton->SetIsEnabled(false);
+        VerifyButton->SetVisibility(ESlateVisibility::Collapsed);
+    }
+    if (OtpBox)
+    {
+        OtpBox->SetText(FText::GetEmpty());
+        OtpBox->SetVisibility(ESlateVisibility::Collapsed);
+    }
+    if (OtpLabel)
+    {
+        OtpLabel->SetVisibility(ESlateVisibility::Collapsed);
+    }
+    
+    // Reset Send OTP button text
+    if (SendOtpButton)
+    {
+        if (UTextBlock* ButtonText = Cast<UTextBlock>(SendOtpButton->GetChildAt(0)))
+        {
+            ButtonText->SetText(FText::FromString("SEND OTP"));
+        }
+    }
 }
 
 void ULoginWidget::ShowMessage(const FString& Message, const FLinearColor& Color)
@@ -509,7 +535,11 @@ void ULoginWidget::StoreAuthToken(const FString& Token)
 void ULoginWidget::ResetLoginForm()
 {
     if (PhoneBox) PhoneBox->SetText(FText::GetEmpty());
-    if (OtpBox) OtpBox->SetText(FText::GetEmpty());
+    if (OtpBox)
+    {
+        OtpBox->SetText(FText::GetEmpty());
+        OtpBox->SetVisibility(ESlateVisibility::Collapsed);  // Hide OTP box
+    }
     
     if (SendOtpButton)
     {
@@ -520,7 +550,17 @@ void ULoginWidget::ResetLoginForm()
         }
     }
     
-    if (VerifyButton) VerifyButton->SetIsEnabled(false);
+    if (VerifyButton)
+    {
+        VerifyButton->SetIsEnabled(false);
+        VerifyButton->SetVisibility(ESlateVisibility::Collapsed);  // Hide verify button
+    }
+    
+    if (OtpLabel)
+    {
+        OtpLabel->SetVisibility(ESlateVisibility::Collapsed);  // Hide OTP label
+    }
+    
     if (StatusText) StatusText->SetText(FText::GetEmpty());
     
     bIsOtpSent = false;
@@ -538,6 +578,7 @@ void ULoginWidget::ShowOtpStep()
     {
         OtpBox->SetVisibility(ESlateVisibility::Visible);
         OtpBox->SetIsEnabled(true);
+        OtpBox->SetText(FText::GetEmpty());  // Clear any previous OTP
         OtpBox->SetKeyboardFocus();
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: OtpBox made visible and focused"));
     }
@@ -548,11 +589,11 @@ void ULoginWidget::ShowOtpStep()
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: OtpLabel made visible"));
     }
     
-    // Show verify button
+    // Show verify button but keep it disabled until 6 digits are entered
     if (VerifyButton)
     {
         VerifyButton->SetVisibility(ESlateVisibility::Visible);
-        VerifyButton->SetIsEnabled(true);
-        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: VerifyButton made visible and enabled"));
+        VerifyButton->SetIsEnabled(false);  // Will be enabled when 6 digits are entered
+        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: VerifyButton made visible but disabled"));
     }
 }
