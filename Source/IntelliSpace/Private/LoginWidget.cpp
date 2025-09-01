@@ -31,6 +31,8 @@ void ULoginWidget::NativeConstruct()
 {
     Super::NativeConstruct();
     
+    SetIsFocusable(true);
+    
     UE_LOG(LogTemp, Warning, TEXT("=== LoginWidget: NativeConstruct Started ==="));
     
     // Check widget bindings
@@ -43,21 +45,33 @@ void ULoginWidget::NativeConstruct()
     
     if (SendOtpButton)
     {
+        SendOtpButton->OnClicked.RemoveAll(this);  // Remove any existing bindings from this object
         SendOtpButton->OnClicked.AddDynamic(this, &ULoginWidget::OnSendOtpClicked);
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: SendOtpButton click event bound"));
     }
     
+    // REMOVED: Duplicate OtpBox->OnTextChanged binding that was here
+    // The binding is now only in SetupUIElements()
+    
     if (VerifyButton)
     {
+        VerifyButton->OnClicked.RemoveAll(this);  // Remove any existing bindings from this object
         VerifyButton->OnClicked.AddDynamic(this, &ULoginWidget::OnVerifyClicked);
-        VerifyButton->SetIsEnabled(false);
+        VerifyButton->SetIsEnabled(true);
+        VerifyButton->SetVisibility(ESlateVisibility::Visible);
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: VerifyButton click event bound, initially disabled"));
     }
     
     if (PhoneBox)
     {
+        PhoneBox->SetIsEnabled(true);
         PhoneBox->SetKeyboardFocus();
-        UE_LOG(LogTemp, Warning, TEXT("LoginWidget: Focus set to PhoneBox"));
+        
+        // For iOS specifically
+        FSlateApplication::Get().SetKeyboardFocus(
+            PhoneBox->TakeWidget(),
+            EFocusCause::SetDirectly
+        );
     }
     
     UE_LOG(LogTemp, Warning, TEXT("=== LoginWidget: NativeConstruct Complete ==="));
@@ -101,6 +115,9 @@ void ULoginWidget::SetupUIElements()
         
         PhoneBox->SetIsReadOnly(false);
         PhoneBox->SetIsPassword(false);
+        
+        // CLEAN BINDING: Remove all existing bindings before adding new one
+        PhoneBox->OnTextChanged.RemoveAll(this);
         PhoneBox->OnTextChanged.AddDynamic(this, &ULoginWidget::OnPhoneTextChanged);
         
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: PhoneBox setup complete"));
@@ -147,6 +164,9 @@ void ULoginWidget::SetupUIElements()
         
         OtpBox->SetIsPassword(false);  // Changed to false so user can see the OTP they enter
         OtpBox->SetIsReadOnly(false);
+        
+        // CLEAN BINDING: Remove all existing bindings before adding new one
+        OtpBox->OnTextChanged.RemoveAll(this);
         OtpBox->OnTextChanged.AddDynamic(this, &ULoginWidget::OnOtpTextChanged);
         
         UE_LOG(LogTemp, Warning, TEXT("LoginWidget: OtpBox setup complete"));
@@ -260,6 +280,11 @@ void ULoginWidget::OnOtpTextChanged(const FText& Text)
 {
     FString OtpCode = Text.ToString();
     
+    // Ensure widgets stay visible
+    if (OtpBox)
+        OtpBox->SetVisibility(ESlateVisibility::Visible);
+    if (VerifyButton)
+        VerifyButton->SetVisibility(ESlateVisibility::Visible);
     FString CleanOtp;
     for (TCHAR Char : OtpCode)
     {
@@ -431,35 +456,6 @@ void ULoginWidget::OnOtpSent(FHttpRequestPtr Request, FHttpResponsePtr Response,
         SendOtpButton->SetIsEnabled(true);
     }
 }
-
-//void ULoginWidget::OnOtpVerified(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
-//{
-//    // FOR TESTING: Always succeed
-//    bWasSuccessful = true;
-//    
-//    if (!bWasSuccessful)
-//    {
-//        ShowMessage("Failed to verify OTP. Please try again.", FLinearColor::Red);
-//        if (VerifyButton)
-//        {
-//            VerifyButton->SetIsEnabled(true);
-//        }
-//        return;
-//    }
-//    
-//    ShowMessage("Login successful! Loading IntelliSpace...", FLinearColor::Green);
-//    OnLoginSuccess("test_token");
-//    
-//    // Remove the widget from viewport BEFORE changing levels
-//    RemoveFromParent();
-//    
-//    FTimerHandle TimerHandle;
-//    GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
-//    {
-//        // Open IntelliSpaceMap
-//        UGameplayStatics::OpenLevel(GetWorld(), "IntelliSpaceMap");
-//    }, 0.5f, false);
-//}
 
 void ULoginWidget::OnOtpVerified(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 {

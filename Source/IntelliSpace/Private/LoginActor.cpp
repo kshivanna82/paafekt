@@ -3,6 +3,7 @@
 #include "AuthSubsystem.h"
 #include "LoginWidget.h"
 #include "FurniLife.h"
+#include "Components/EditableTextBox.h"
 #include "Engine/GameInstance.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
@@ -68,45 +69,60 @@ void ALoginActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ALoginActor::ShowLoginUI()
 {
-    if (!LoginWidgetClass)
+    if (!IsInGameThread())
     {
-        UE_LOG(LogTemp, Warning, TEXT("[Login] No LoginWidgetClass set - skipping to FurniLife"));
-        SpawnFurniLife();
+        AsyncTask(ENamedThreads::GameThread, [this]()
+        {
+            ShowLoginUI();
+        });
         return;
     }
     
     APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
-    if (!PC)
+    if (!PC) return;
+    
+    if (!LoginWidget && LoginWidgetClass)
     {
-        UE_LOG(LogTemp, Error, TEXT("[Login] No PlayerController"));
-        return;
+        LoginWidget = CreateWidget<ULoginWidget>(PC, LoginWidgetClass);
     }
     
-    // Create widget
-    LoginWidget = CreateWidget<ULoginWidget>(PC, LoginWidgetClass);
-    if (!LoginWidget)
+    if (LoginWidget && !LoginWidget->IsInViewport())
     {
-        UE_LOG(LogTemp, Error, TEXT("[Login] Failed to create login widget"));
-        SpawnFurniLife();
-        return;
+        LoginWidget->AddToViewport();
+        
+        // Simplified input mode for iOS
+        FInputModeUIOnly InputMode;
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        // Don't set widget to focus here - let the widget handle its own focus
+        PC->SetInputMode(InputMode);
+        
+        #if PLATFORM_IOS
+        PC->bShowMouseCursor = false;
+        #endif
+        
+        // Let the widget set its own focus after a frame
+        GetWorld()->GetTimerManager().SetTimerForNextTick([this]()
+        {
+            if (LoginWidget && LoginWidget->PhoneBox)
+            {
+                LoginWidget->PhoneBox->SetKeyboardFocus();
+            }
+        });
     }
-    
-    // Show widget
-    LoginWidget->AddToViewport(1000);
-    
-    // Set input mode for UI
-    FInputModeUIOnly InputMode;
-    InputMode.SetWidgetToFocus(LoginWidget->TakeWidget());
-    InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-    PC->SetInputMode(InputMode);
-    PC->bShowMouseCursor = true;
-    
-    UE_LOG(LogTemp, Warning, TEXT("[Login] Login UI shown successfully"));
 }
 
 void ALoginActor::HideLoginUI()
 {
-    if (LoginWidget)
+    if (!IsInGameThread())
+    {
+        AsyncTask(ENamedThreads::GameThread, [this]()
+        {
+            HideLoginUI();  // Recursive call on game thread
+        });
+        return;
+    }
+    
+    if (LoginWidget && LoginWidget->IsInViewport())  // Check if valid and in viewport
     {
         LoginWidget->RemoveFromParent();
         LoginWidget = nullptr;
@@ -114,11 +130,17 @@ void ALoginActor::HideLoginUI()
     
     // Return to game input
     APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
-    if (PC)
+    if (PC)  // Good that you check this
     {
         FInputModeGameOnly GameMode;
         PC->SetInputMode(GameMode);
-        PC->bShowMouseCursor = false;
+        PC->bShowMouseCursor = false;  // Good for iOS
+        
+        // Additional iOS-specific settings
+        #if PLATFORM_IOS
+        PC->bEnableClickEvents = false;
+        PC->bEnableTouchEvents = true;
+        #endif
     }
     
     UE_LOG(LogTemp, Log, TEXT("[Login] Login UI hidden"));
