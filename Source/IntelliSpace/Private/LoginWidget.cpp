@@ -478,12 +478,72 @@ void ULoginWidget::OnOtpVerified(FHttpRequestPtr Request, FHttpResponsePtr Respo
     
     ShowMessage("Login successful! Loading IntelliSpace...", FLinearColor::Green);
     
+    // CRITICAL FIX: Reset input mode to game mode before transitioning
+    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+    if (PC)
+    {
+        // Set to game-only input mode
+        FInputModeGameOnly GameMode;
+        PC->SetInputMode(GameMode);
+        
+        // Disable mouse cursor
+        PC->bShowMouseCursor = false;
+        
+        // iOS specific settings for touch input
+        #if PLATFORM_IOS
+        PC->bEnableClickEvents = false;
+        PC->bEnableTouchEvents = true;
+        PC->bEnableTouchOverEvents = true;
+        #endif
+        
+        // Desktop/Mac settings
+        #if PLATFORM_MAC || PLATFORM_WINDOWS
+        PC->bEnableClickEvents = true;
+        PC->bEnableMouseOverEvents = true;
+        #endif
+        
+        UE_LOG(LogTemp, Warning, TEXT("Input mode reset to Game mode"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to get PlayerController for input reset"));
+    }
+    
     // Clean up the widget completely
     RemoveFromParent();
     
-    // Open level with ABSOLUTE transition (replaces everything)
-    UGameplayStatics::OpenLevel(GetWorld(), TEXT("/Game/IntelliSpaceMap"), true);
+    // Small delay to ensure input mode is fully applied before level transition
+    FTimerHandle TransitionTimer;
+    GetWorld()->GetTimerManager().SetTimer(TransitionTimer, [this]()
+    {
+        // Open level with ABSOLUTE transition (replaces everything)
+        UGameplayStatics::OpenLevel(GetWorld(), TEXT("/Game/IntelliSpaceMap"), true);
+    }, 0.1f, false);  // 100ms delay
 }
+
+//void ULoginWidget::OnOtpVerified(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+//{
+//    // FOR TESTING: Always succeed
+//    bWasSuccessful = true;
+//    
+//    if (!bWasSuccessful)
+//    {
+//        ShowMessage("Failed to verify OTP. Please try again.", FLinearColor::Red);
+//        if (VerifyButton)
+//        {
+//            VerifyButton->SetIsEnabled(true);
+//        }
+//        return;
+//    }
+//    
+//    ShowMessage("Login successful! Loading IntelliSpace...", FLinearColor::Green);
+//    
+//    // Clean up the widget completely
+//    RemoveFromParent();
+//    
+//    // Open level with ABSOLUTE transition (replaces everything)
+//    UGameplayStatics::OpenLevel(GetWorld(), TEXT("/Game/IntelliSpaceMap"), true);
+//}
 
 //void ULoginWidget::OnOtpExpired()
 //{

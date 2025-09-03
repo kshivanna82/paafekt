@@ -29,7 +29,6 @@
 #endif
 #if PLATFORM_IOS
 #include "CoreMLModelBridge.h"
-//#include <onnxruntime/core/session/onnxruntime_cxx_api.h>
 #endif
 
 #include "FurniLife.generated.h"
@@ -38,67 +37,83 @@ UCLASS()
 class INTELLISPACE_API AFurniLife : public AActor
 {
     GENERATED_BODY()
+
 public:
     AFurniLife(const FObjectInitializer& ObjectInitializer);
-protected:
-    virtual void BeginPlay() override;
-public:
     virtual void Tick(float DeltaTime) override;
-//    virtual void BeginDestroy() override;
+    
     UFUNCTION(BlueprintImplementableEvent, Category = Camera)
-        void OnNextVideoFrame();
+    void OnNextVideoFrame();
+    
     UFUNCTION(BlueprintCallable, Category = Camera)
-        bool ReadFrame();
+    bool ReadFrame();
     
-    
+    // Camera Properties
+    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera, meta = (ClampMin = 0, UIMin = 0))
+    int32 CameraID;
     
     UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera, meta = (ClampMin = 0, UIMin = 0))
-        int32 CameraID;
+    int32 VideoTrackID;
+    
     UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera, meta = (ClampMin = 0, UIMin = 0))
-        int32 VideoTrackID;
-        
-    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera, meta = (ClampMin = 0, UIMin = 0))
-        float RefreshRate;
+    float RefreshRate;
+    
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-        FVector2D VideoSize;
+    FVector2D VideoSize;
+    
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera)
-        bool isStreamOpen = false;
+    bool isStreamOpen;
+    
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera)
-        float RefreshTimer;
+    float RefreshTimer;
     
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-        float Brightness;
-    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-        float Multiply;
+    float Brightness;
     
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-        UMediaPlayer* Camera_MediaPlayer;
+    float Multiply;
+    
+    // Media Components
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-        UMediaTexture* Camera_MediaTexture;
+    UMediaPlayer* Camera_MediaPlayer;
+    
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-        UTextureRenderTarget2D* Camera_RenderTarget;
-//    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-//        UMaterialInstanceDynamic* Camera_MatRaw;
+    UMediaTexture* Camera_MediaTexture;
+    
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-        UMaterialInstanceDynamic* Camera_MatPost;
-        
+    UTextureRenderTarget2D* Camera_RenderTarget;
+    
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-        USceneComponent* rootComp;
-//    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-//        UImagePlateComponent* ImagePlateRaw;
+    UMaterialInstanceDynamic* Camera_MatPost;
+    
+    // Scene Components
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
-        UImagePlateComponent* ImagePlatePost;
+    USceneComponent* rootComp;
+    
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
+    UImagePlateComponent* ImagePlatePost;
+    
+    // Texture Components
     UPROPERTY(BlueprintReadWrite, VisibleAnyWhere, Category = Camera)
-        UTexture2D* Camera_Texture2D;
+    UTexture2D* Camera_Texture2D;
+    
     UPROPERTY()
-        UTexture2D* VideoMask_Texture2D;
-    UPROPERTY(BlueprintReadWrite, VisibleAnyWhere, Category = Camera)
-        TArray<FColor> ColorData;
+    UTexture2D* VideoMask_Texture2D;
     
-
+    UPROPERTY(BlueprintReadWrite, VisibleAnyWhere, Category = Camera)
+    TArray<FColor> ColorData;
+    
+    // Static instance
     static AFurniLife* CurrentInstance;
+    
+    // iOS specific callback
     void OnCameraFrameFromPixelBuffer(CVPixelBufferRef buffer);
 
+protected:
+    virtual void BeginPlay() override;
+
+private:
+    // OpenCV members
     cv::VideoCapture cap;
     cv::Mat frame;
     cv::Mat resized;
@@ -106,10 +121,14 @@ public:
     cv::Size cvSize;
     cv::Mat cvMat;
     
+    // Private methods
+    void InitializeCamera();
     void ProcessInputForModel();
     void RunModelInference();
     void ApplySegmentationMask();
-    void InitializeCamera(); 
+    void UpdateTextureSafely();
+    void AssignTextureToImagePlate();  // Added for iOS fix
+    void UpdateImagePlateTexture(); 
     
 #if PLATFORM_MAC
     TWeakInterfacePtr<INNERuntimeCPU> CpuRuntime;
@@ -118,27 +137,10 @@ public:
     
     TArray<TArray<float>> OutputTensors;
     TArray<float> OutputBuffer;
-
     TArray<UE::NNE::FTensorBindingCPU> OutputBindings;
 #endif
+
 #if PLATFORM_IOS
-
-//    Ort::Env OrtEnv{ORT_LOGGING_LEVEL_WARNING, "FurniLife"};
-//    Ort::SessionOptions SessionOptions;
-//    Ort::Session* OrtSession = nullptr;
-//
-//    std::vector<std::string> InputNameStrs;
-//    std::vector<std::string> OutputNameStrs;
-//    TArray<const char*> InputNames;
-//    TArray<const char*> OutputNames;
-    //int32 FrameCounter;
-//    FString OutputDir;
-//
-//    std::vector<const char*> InputNames;
-//    std::vector<const char*> OutputNames;
     std::vector<float> OutputBuffer;
-
 #endif
-    
-    
 };
