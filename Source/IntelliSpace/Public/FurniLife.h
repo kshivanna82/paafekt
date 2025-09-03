@@ -109,6 +109,7 @@ public:
     void ProcessInputForModel();
     void RunModelInference();
     void ApplySegmentationMask();
+    void InitializeCamera(); 
     
 #if PLATFORM_MAC
     TWeakInterfacePtr<INNERuntimeCPU> CpuRuntime;
