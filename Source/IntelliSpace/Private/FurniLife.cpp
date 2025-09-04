@@ -4,6 +4,7 @@
 #include "Engine/Texture2D.h"
 #include "RenderUtils.h"
 #include "RHICommandList.h"
+#include "Materials/Material.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Rendering/Texture2DResource.h"
 #include "ImagePlateComponent.h"
@@ -15,6 +16,7 @@
 #import "CoreMLModelBridge.h"
 #endif
 #include "GameFramework/PlayerStart.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "EngineUtils.h"
 #include "CineCameraActor.h"
 #include "Kismet/GameplayStatics.h"
@@ -26,8 +28,13 @@ AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(Obje
 {
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.bStartWithTickEnabled = true;
+    
+    // Create root component
     rootComp = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
-    ImagePlatePost = CreateDefaultSubobject<UImagePlateComponent>(TEXT("ImagePlatePost"));
+    SetRootComponent(rootComp);
+    
+    // DON'T create ImagePlate in constructor - do it dynamically
+    ImagePlatePost = nullptr;
 
     Brightness = 0;
     Multiply = 1;
@@ -83,7 +90,6 @@ void AFurniLife::BeginPlay()
         [AVCaptureDevice requestAccessForMediaType:AVMediaTypeVideo completionHandler:^(BOOL granted) {
             UE_LOG(LogTemp, Warning, TEXT("Camera permission response: %s"), granted ? TEXT("GRANTED") : TEXT("DENIED"));
             if (granted) {
-                // Use AsyncTask instead of dispatch_async for Unreal
                 AsyncTask(ENamedThreads::GameThread, [this]() {
                     InitializeCamera();
                 });
@@ -105,7 +111,6 @@ void AFurniLife::InitializeCamera()
     UE_LOG(LogTemp, Warning, TEXT("InitializeCamera called"));
     
 #if PLATFORM_IOS
-    // Check current authorization status again
     AVAuthorizationStatus currentStatus = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo];
     UE_LOG(LogTemp, Warning, TEXT("Camera auth status in InitializeCamera: %d"), (int)currentStatus);
 #endif
@@ -116,7 +121,6 @@ void AFurniLife::InitializeCamera()
         UE_LOG(LogTemp, Error, TEXT("❌ Failed to open camera with ID %d"), CameraID);
         
 #if PLATFORM_IOS
-        // Try different camera IDs on iOS
         for (int i = 0; i < 3; i++) {
             UE_LOG(LogTemp, Warning, TEXT("Trying camera ID %d..."), i);
             cap.open(i);
@@ -138,28 +142,28 @@ void AFurniLife::InitializeCamera()
         UE_LOG(LogTemp, Warning, TEXT("✅ Camera opened successfully with ID %d"), CameraID);
     }
     
-    // Set buffer size
     cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
+    cap.set(cv::CAP_PROP_FPS, 30);
     
-    // Check if camera is really working
-    cv::Mat testFrame;
-    if (cap.read(testFrame)) {
-        UE_LOG(LogTemp, Warning, TEXT("✅ Test frame captured: %dx%d"), testFrame.cols, testFrame.rows);
-        
 #if PLATFORM_IOS
-        // Update VideoSize based on actual camera dimensions after rotation
-        VideoSize = FVector2D(testFrame.rows, testFrame.cols);  // Swapped for rotation
-        UE_LOG(LogTemp, Warning, TEXT("Updated VideoSize for iOS: %fx%f"), VideoSize.X, VideoSize.Y);
-#endif
+    VideoSize = FVector2D(480, 360);
+    UE_LOG(LogTemp, Warning, TEXT("Using default VideoSize for iOS: %fx%f"), VideoSize.X, VideoSize.Y);
+#else
+    cv::Mat testFrame;
+    if (cap.read(testFrame) && !testFrame.empty()) {
+        VideoSize = FVector2D(testFrame.cols, testFrame.rows);
+        UE_LOG(LogTemp, Warning, TEXT("Test frame size: %fx%f"), VideoSize.X, VideoSize.Y);
     } else {
-        UE_LOG(LogTemp, Error, TEXT("❌ Failed to capture test frame"));
-//        return;
+        VideoSize = FVector2D(640, 480);
+        UE_LOG(LogTemp, Warning, TEXT("Using default VideoSize"));
     }
+#endif
     
+    // ALWAYS set isStreamOpen to true if camera opened
     isStreamOpen = true;
     UE_LOG(LogTemp, Warning, TEXT("✅ isStreamOpen set to true"));
     
-    // Initialize buffers with updated size
+    // Initialize buffers
     ColorData.SetNumUninitialized(VideoSize.X * VideoSize.Y);
     cvSize = cv::Size(VideoSize.X, VideoSize.Y);
     cvMat = cv::Mat(cvSize, CV_8UC4, ColorData.GetData());
@@ -170,6 +174,7 @@ void AFurniLife::InitializeCamera()
     
     if (!Camera_Texture2D) {
         UE_LOG(LogTemp, Error, TEXT("❌ Failed to create Camera_Texture2D"));
+        isStreamOpen = false;
         return;
     }
     
@@ -184,44 +189,77 @@ void AFurniLife::InitializeCamera()
     
     UE_LOG(LogTemp, Warning, TEXT("✅ Textures created"));
     
-    // Rest of your setup code...
+    // Create ImagePlate dynamically
+    if (!ImagePlatePost)
+    {
+        ImagePlatePost = NewObject<UImagePlateComponent>(this, TEXT("DynamicImagePlate"));
+        ImagePlatePost->SetupAttachment(RootComponent);
+        ImagePlatePost->RegisterComponent();
+        
+        ImagePlatePost->bAutoActivate = true;
+        ImagePlatePost->SetVisibility(true);
+        ImagePlatePost->SetHiddenInGame(false);
+        
+        UE_LOG(LogTemp, Warning, TEXT("✅ Created ImagePlate dynamically"));
+    }
     
-    UE_LOG(LogTemp, Warning, TEXT("✅ Camera initialization complete"));
-    
-    // Position ImagePlate
+    // Position ImagePlate properly
     for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
     {
         APlayerStart* PlayerStart = *It;
         if (PlayerStart && ImagePlatePost)
         {
-            FVector ForwardOffset = PlayerStart->GetActorForwardVector() * 100.0f;
+            FVector ForwardOffset = PlayerStart->GetActorForwardVector() * 300.0f;
             FVector PlacementLocation = PlayerStart->GetActorLocation() + ForwardOffset + FVector(0, 0, 100);
-            FRotator PlacementRotation = PlayerStart->GetActorRotation();
             
             ImagePlatePost->SetWorldLocation(PlacementLocation);
-            ImagePlatePost->SetWorldRotation(PlacementRotation);
-            ImagePlatePost->SetWorldScale3D(FVector(4, 3, 1));
+            ImagePlatePost->SetWorldRotation(PlayerStart->GetActorRotation());
             
-            AssignTextureToImagePlate();
-            UE_LOG(LogTemp, Warning, TEXT("✅ ImagePlate positioned and texture assigned"));
+            // Use SetRelativeScale3D to avoid scale issues
+            ImagePlatePost->SetRelativeScale3D(FVector(4.0f, 3.0f, 1.0f));
+            
+            UE_LOG(LogTemp, Warning, TEXT("ImagePlate positioned at: %s with scale: %s"),
+                   *PlacementLocation.ToString(),
+                   *ImagePlatePost->GetComponentScale().ToString());
+            
+            // Load your M_CameraFeed material
+            UMaterialInterface* BaseMaterial = LoadObject<UMaterialInterface>(nullptr,
+                TEXT("/Game/FurniLife/Camera_Post.Camera_Post"));
+            
+            if (BaseMaterial)
+            {
+                Camera_MatPost = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+                ImagePlatePost->SetMaterial(0, Camera_MatPost);
+                
+                if (Camera_Texture2D)
+                {
+                    // Set the texture parameter - use the exact name from your material
+                    Camera_MatPost->SetTextureParameterValue(FName("Texture"), Camera_Texture2D);
+                }
+                
+                UE_LOG(LogTemp, Warning, TEXT("✅ M_CameraFeed material loaded and texture set"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("❌ Failed to load M_CameraFeed material - check the path"));
+            }
         }
         break;
     }
-        
+    
+#if PLATFORM_IOS
     // Load CoreML model
-    #if PLATFORM_IOS
     NSString* ModelPath = [[NSBundle mainBundle] pathForResource:@"u2net" ofType:@"mlmodelc"];
     if (!ModelPath) {
         UE_LOG(LogTemp, Error, TEXT("❌ Could not find u2net.mlmodelc in bundle."));
-        return;
-    }
-    
-    if (!GetSharedBridge()->LoadModel([ModelPath UTF8String])) {
+    } else if (!GetSharedBridge()->LoadModel([ModelPath UTF8String])) {
         UE_LOG(LogTemp, Error, TEXT("❌ Failed to load CoreML model."));
-        return;
+    } else {
+        UE_LOG(LogTemp, Warning, TEXT("✅ CoreML model loaded"));
     }
-    UE_LOG(LogTemp, Warning, TEXT("✅ CoreML model loaded"));
-  #endif
+#endif
+    
+    UE_LOG(LogTemp, Warning, TEXT("✅ Camera initialization complete"));
 }
 
 void AFurniLife::Tick(float DeltaTime)
@@ -238,38 +276,67 @@ void AFurniLife::Tick(float DeltaTime)
     if (TimeSinceLastFrame >= 1.0f / 15.0f)
     {
         TimeSinceLastFrame = 0;
-        ReadFrame();
+        bool success = ReadFrame();
         
-        // Log occasionally
+        // Enhanced debug logging
         static int FrameCount = 0;
         if (++FrameCount % 30 == 0)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Frame %d processed"), FrameCount);
+            UE_LOG(LogTemp, Warning, TEXT("Frame %d: %s, Texture: %s, Material: %s, ImagePlate: %s"),
+                FrameCount,
+                success ? TEXT("OK") : TEXT("FAILED"),
+                Camera_Texture2D ? TEXT("Valid") : TEXT("NULL"),
+                Camera_MatPost ? TEXT("Valid") : TEXT("NULL"),
+                (ImagePlatePost && ImagePlatePost->IsVisible()) ? TEXT("Visible") : TEXT("Not Visible"));
         }
     }
-    //return;
 }
 
 bool AFurniLife::ReadFrame()
 {
-//    if (!cap.isOpened())
-//    {
-//        cap.open(CameraID);
-//        return false;
-//    }
-//    
-//    if (!cap.read(frame) || frame.empty())
-//    {
-//        return false;
-//    }
-//
-//#if PLATFORM_IOS
-//    cv::rotate(frame, frame, cv::ROTATE_90_COUNTERCLOCKWISE);
-////    cv::flip(frame, frame, 1);
-//#endif
+    if (!cap.isOpened())
+    {
+        cap.open(CameraID);
+        return false;
+    }
     
-    // KEEP SEGMENTATION DISABLED UNTIL VIDEO WORKS
-    bool bEnableSegmentation = false;
+    if (!cap.read(frame) || frame.empty())
+    {
+        return false;
+    }
+
+#if PLATFORM_IOS
+    cv::rotate(frame, frame, cv::ROTATE_90_CLOCKWISE);
+    cv::flip(frame, frame, 1);  // Horizontal flip to fix orientation
+    
+    static bool bFirstValidFrame = true;
+    if (bFirstValidFrame && !frame.empty())
+    {
+        VideoSize = FVector2D(frame.cols, frame.rows);
+        UE_LOG(LogTemp, Warning, TEXT("Actual frame size after rotation: %fx%f"), VideoSize.X, VideoSize.Y);
+        
+        if (Camera_Texture2D && (Camera_Texture2D->GetSizeX() != VideoSize.X || Camera_Texture2D->GetSizeY() != VideoSize.Y))
+        {
+            Camera_Texture2D->RemoveFromRoot();
+            Camera_Texture2D = UTexture2D::CreateTransient(VideoSize.X, VideoSize.Y, PF_B8G8R8A8);
+            Camera_Texture2D->SRGB = false;
+            Camera_Texture2D->AddToRoot();
+            Camera_Texture2D->UpdateResource();
+            
+            ColorData.SetNumUninitialized(VideoSize.X * VideoSize.Y);
+            
+            if (Camera_MatPost)
+            {
+                Camera_MatPost->SetTextureParameterValue(FName("Texture"), Camera_Texture2D);
+            }
+        }
+        
+        bFirstValidFrame = false;
+    }
+#endif
+    
+    // TEMPORARILY DISABLE segmentation to test video first
+    bool bEnableSegmentation = true;  // Set to true once video works
     
     if (bEnableSegmentation)
     {
@@ -279,111 +346,57 @@ bool AFurniLife::ReadFrame()
     }
     
     // Convert to BGRA
-//    if (frame.channels() == 3)
-//    {
-//        cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
-//    }
+    if (frame.channels() == 3)
+    {
+        cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
+    }
     
     // Ensure correct size
-//    if (frame.cols != VideoSize.X || frame.rows != VideoSize.Y)
-//    {
-//        cv::resize(frame, frame, cv::Size(VideoSize.X, VideoSize.Y));
-//    }
-//    
-//    // Direct texture update without render commands
-//    if (Camera_Texture2D && Camera_Texture2D->GetPlatformData())
-//    {
-//        FTexture2DMipMap& Mip = Camera_Texture2D->GetPlatformData()->Mips[0];
-//        void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
-//        
-//        if (Data)
-//        {
-//            uint8* DestPtr = (uint8*)Data;
-//            for (int y = 0; y < frame.rows; ++y)
-//            {
-//                const cv::Vec4b* srcRow = frame.ptr<cv::Vec4b>(y);
-//                for (int x = 0; x < frame.cols; ++x)
-//                {
-//                    const cv::Vec4b& pixel = srcRow[x];
-//                    *DestPtr++ = pixel[0]; // B
-//                    *DestPtr++ = pixel[1]; // G
-//                    *DestPtr++ = pixel[2]; // R
-//                    *DestPtr++ = 255;      // A - force opaque
-//                }
-//            }
-//            
-//            Mip.BulkData.Unlock();
-//            Camera_Texture2D->UpdateResource();
-//        }
-//    }
-    
-    // Update material
-//    static bool bFirstFrame = true;
-//    if (bFirstFrame)
-//    {
-//        AssignTextureToImagePlate();
-//        bFirstFrame = false;
-//    }
-    
-    return true;
-}
-
-void AFurniLife::UpdateTextureSafely()
-{
-    // Not used anymore - direct update in ReadFrame instead
-}
-
-void AFurniLife::AssignTextureToImagePlate()
-{
-    if (!ImagePlatePost || !Camera_Texture2D)
+    if (frame.cols != VideoSize.X || frame.rows != VideoSize.Y)
     {
-        UE_LOG(LogTemp, Warning, TEXT("ImagePlatePost or Camera_Texture2D is null"));
-        return;
+        cv::resize(frame, frame, cv::Size(VideoSize.X, VideoSize.Y));
     }
     
-    UMaterialInterface* CurrentMaterial = ImagePlatePost->GetMaterial(0);
-    
-    if (!CurrentMaterial)
+    // Direct texture update
+    if (Camera_Texture2D && Camera_Texture2D->GetPlatformData())
     {
-        UMaterial* UnlitMaterial = LoadObject<UMaterial>(nullptr,
-            TEXT("/Engine/EngineMaterials/UnlitMaterial.UnlitMaterial"));
+        FTexture2DMipMap& Mip = Camera_Texture2D->GetPlatformData()->Mips[0];
+        void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
         
-        if (UnlitMaterial)
+        if (Data)
         {
-            Camera_MatPost = UMaterialInstanceDynamic::Create(UnlitMaterial, this);
-            ImagePlatePost->SetMaterial(0, Camera_MatPost);
-            UE_LOG(LogTemp, Warning, TEXT("Created unlit material"));
-        }
-    }
-    else
-    {
-        Camera_MatPost = Cast<UMaterialInstanceDynamic>(CurrentMaterial);
-        if (!Camera_MatPost)
-        {
-            Camera_MatPost = UMaterialInstanceDynamic::Create(CurrentMaterial, this);
-            if (Camera_MatPost)
+            uint8* DestPtr = (uint8*)Data;
+            for (int y = 0; y < frame.rows; ++y)
             {
-                ImagePlatePost->SetMaterial(0, Camera_MatPost);
+                const cv::Vec4b* srcRow = frame.ptr<cv::Vec4b>(y);
+                for (int x = 0; x < frame.cols; ++x)
+                {
+                    const cv::Vec4b& pixel = srcRow[x];
+                    *DestPtr++ = pixel[0]; // B
+                    *DestPtr++ = pixel[1]; // G
+                    *DestPtr++ = pixel[2]; // R
+                    *DestPtr++ = 255;      // A - force opaque
+                }
             }
+            
+            Mip.BulkData.Unlock();
+            Camera_Texture2D->UpdateResource();
         }
     }
     
-    if (Camera_MatPost)
+    // Force material update every frame
+    if (Camera_MatPost && Camera_Texture2D)
     {
         Camera_MatPost->SetTextureParameterValue(FName("Texture"), Camera_Texture2D);
-        Camera_MatPost->SetTextureParameterValue(FName("BaseTexture"), Camera_Texture2D);
-        Camera_MatPost->SetTextureParameterValue(FName("MainTexture"), Camera_Texture2D);
+        Camera_MatPost->SetTextureParameterValue(FName("Texture Render Target"), Camera_Texture2D);
         
-        UE_LOG(LogTemp, Warning, TEXT("✅ Texture parameters set on material"));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ Failed to get or create dynamic material"));
+        if (ImagePlatePost)
+        {
+            ImagePlatePost->MarkRenderStateDirty();
+        }
     }
     
-    ImagePlatePost->SetVisibility(true);
-    ImagePlatePost->SetHiddenInGame(false);
-    ImagePlatePost->MarkRenderStateDirty();
+    return true;
 }
 
 void AFurniLife::ProcessInputForModel()
@@ -460,7 +473,7 @@ void AFurniLife::RunModelInference()
 #endif
 
 #if PLATFORM_MAC
-    // Mac ONNX inference code...
+    // Mac ONNX inference code would go here
 #endif
 }
 
@@ -502,7 +515,7 @@ void AFurniLife::ApplySegmentationMask()
         cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
     }
     
-    // Use threshold (adjust between 40-80 as needed)
+    // Adjust threshold as needed (40-80 range)
     uchar threshold = 64;
     
     for (int y = 0; y < frame.rows; ++y)
@@ -521,62 +534,24 @@ void AFurniLife::ApplySegmentationMask()
             }
             else
             {
-                px[3] = 255;
+                px[3] = 255; // Keep original with full alpha
             }
         }
     }
 }
 
+// Stub implementations for unused functions
+void AFurniLife::UpdateTextureSafely()
+{
+    // Not used - direct update in ReadFrame
+}
+
+void AFurniLife::AssignTextureToImagePlate()
+{
+    // Already done in InitializeCamera
+}
+
 void AFurniLife::OnCameraFrameFromPixelBuffer(CVPixelBufferRef buffer)
 {
-    CVPixelBufferLockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly);
-    int width = CVPixelBufferGetWidth(buffer);
-    int height = CVPixelBufferGetHeight(buffer);
-    uint8_t* base = (uint8_t*)CVPixelBufferGetBaseAddress(buffer);
-    size_t stride = CVPixelBufferGetBytesPerRow(buffer);
-
-    cv::Mat mat(height, width, CV_8UC4, base, stride);
-    frame = mat.clone();
-    CVPixelBufferUnlockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly);
-
-    // Process similar to ReadFrame
-    ProcessInputForModel();
-    RunModelInference();
-    ApplySegmentationMask();
-    
-    cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
-    
-    int Width = frame.cols;
-    int Height = frame.rows;
-    VideoSize = FVector2D(Width, Height);
-    
-    ColorData.SetNumUninitialized(Width * Height);
-    
-    for (int y = 0; y < Height; ++y)
-    {
-        for (int x = 0; x < Width; ++x)
-        {
-            cv::Vec4b& srcPixel = frame.at<cv::Vec4b>(y, x);
-            int index = y * Width + x;
-            ColorData[index] = FColor(srcPixel[2], srcPixel[1], srcPixel[0], srcPixel[3]);
-        }
-    }
-    
-    if (Camera_Texture2D && Camera_Texture2D->GetPlatformData())
-    {
-        FTexture2DMipMap& Mip = Camera_Texture2D->GetPlatformData()->Mips[0];
-        void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
-        
-        if (Data)
-        {
-            FMemory::Memcpy(Data, ColorData.GetData(), ColorData.Num() * sizeof(FColor));
-            Mip.BulkData.Unlock();
-            Camera_Texture2D->UpdateResource();
-        }
-        
-        if (Camera_MatPost)
-        {
-            Camera_MatPost->SetTextureParameterValue(FName("Texture"), Camera_Texture2D);
-        }
-    }
+    // Not currently used but kept for future native camera implementation
 }
