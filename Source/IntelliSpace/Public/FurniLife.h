@@ -147,6 +147,8 @@ private:
     std::deque<uchar> thresholdHistory;  // For temporal smoothing
     float smoothedThreshold = -1.0f;  // For exponential moving average
     
+    void UpdateImagePlatePosition(const cv::Rect& personBounds, int maskWidth, int maskHeight);
+    
 #if PLATFORM_MAC
     TWeakInterfacePtr<INNERuntimeCPU> CpuRuntime;
     TSharedPtr<UE::NNE::IModelCPU> CpuModel;
