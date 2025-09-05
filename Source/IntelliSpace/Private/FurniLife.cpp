@@ -307,7 +307,7 @@ bool AFurniLife::ReadFrame()
 
 #if PLATFORM_IOS
     cv::rotate(frame, frame, cv::ROTATE_90_CLOCKWISE);
-    cv::flip(frame, frame, 1);  // Horizontal flip to fix orientation
+//    cv::flip(frame, frame, 0);  // Horizontal flip to fix orientation
     
     static bool bFirstValidFrame = true;
     if (bFirstValidFrame && !frame.empty())
@@ -477,6 +477,69 @@ void AFurniLife::RunModelInference()
 #endif
 }
 
+//void AFurniLife::ApplySegmentationMask()
+//{
+//    const int Width = 320;
+//    const int Height = 320;
+//    
+//#if PLATFORM_IOS
+//    if (OutputBuffer.empty()) {
+//        return;
+//    }
+//    cv::Mat mask(Height, Width, CV_32FC1, OutputBuffer.data());
+//#endif
+//    
+//#if PLATFORM_MAC
+//    const float* MaskOutput = OutputTensors.Last().GetData();
+//    cv::Mat mask(Height, Width, CV_32FC1, (void*)MaskOutput);
+//#endif
+//
+//    // Normalize mask to 0-255 range
+//    double minVal, maxVal;
+//    cv::minMaxLoc(mask, &minVal, &maxVal);
+//    
+//    cv::Mat normalized;
+//    if (maxVal > 0)
+//    {
+//        mask.convertTo(normalized, CV_8UC1, 255.0 / maxVal);
+//    }
+//    else
+//    {
+//        normalized = cv::Mat::zeros(Height, Width, CV_8UC1);
+//    }
+//    
+//    cv::resize(normalized, alphaMask, cv::Size(VideoSize.X, VideoSize.Y));
+//    
+//    if (frame.channels() == 3)
+//    {
+//        cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
+//    }
+//    
+//    // Adjust threshold as needed (40-80 range)
+//    uchar threshold = 64;
+//    
+//    for (int y = 0; y < frame.rows; ++y)
+//    {
+//        for (int x = 0; x < frame.cols; ++x)
+//        {
+//            uchar alpha = alphaMask.at<uchar>(y, x);
+//            cv::Vec4b& px = frame.at<cv::Vec4b>(y, x);
+//            
+//            if (alpha < threshold)
+//            {
+//                px[0] = 0;   // B
+//                px[1] = 255; // G
+//                px[2] = 0;   // R
+//                px[3] = 255; // A
+//            }
+//            else
+//            {
+//                px[3] = 255; // Keep original with full alpha
+//            }
+//        }
+//    }
+//}
+
 void AFurniLife::ApplySegmentationMask()
 {
     const int Width = 320;
@@ -508,15 +571,18 @@ void AFurniLife::ApplySegmentationMask()
         normalized = cv::Mat::zeros(Height, Width, CV_8UC1);
     }
     
+    // SMART THRESHOLD CALCULATION
+    uchar threshold = CalculateSmartThreshold(normalized);
+    
+    // Apply temporal smoothing to avoid flickering
+    threshold = ApplyTemporalSmoothing(threshold);
+    
     cv::resize(normalized, alphaMask, cv::Size(VideoSize.X, VideoSize.Y));
     
     if (frame.channels() == 3)
     {
         cv::cvtColor(frame, frame, cv::COLOR_BGR2BGRA);
     }
-    
-    // Adjust threshold as needed (40-80 range)
-    uchar threshold = 64;
     
     for (int y = 0; y < frame.rows; ++y)
     {
@@ -525,7 +591,7 @@ void AFurniLife::ApplySegmentationMask()
             uchar alpha = alphaMask.at<uchar>(y, x);
             cv::Vec4b& px = frame.at<cv::Vec4b>(y, x);
             
-            if (alpha < threshold)
+            if (alpha < 100)
             {
                 px[0] = 0;   // B
                 px[1] = 255; // G
@@ -539,6 +605,264 @@ void AFurniLife::ApplySegmentationMask()
         }
     }
 }
+
+// Method 1: Otsu's Method (Best for bimodal distributions)
+uchar AFurniLife::CalculateOtsuThreshold(const cv::Mat& mask)
+{
+    cv::Mat binary;
+    double otsuThreshold = cv::threshold(mask, binary, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+    
+    // Otsu often needs adjustment for segmentation masks
+    // Apply a bias factor based on mask characteristics
+    float biasFactor = 0.8f; // Slightly lower to include more foreground
+    
+    return static_cast<uchar>(otsuThreshold * biasFactor);
+}
+
+// Method 2: Percentile-based (Robust to outliers)
+uchar AFurniLife::CalculatePercentileThreshold(const cv::Mat& mask)
+{
+    // Flatten the mask to 1D for sorting
+    cv::Mat flat = mask.reshape(1, mask.total());
+    cv::Mat sorted;
+    cv::sort(flat, sorted, cv::SORT_ASCENDING);
+    
+    // Use the value at 30th percentile as threshold
+    // This assumes ~30% of image is background
+    float percentile = 0.3f; // Adjustable based on typical scene composition
+    int index = static_cast<int>(sorted.total() * percentile);
+    
+    return sorted.at<uchar>(index);
+}
+
+// Method 3: Histogram Analysis (Most comprehensive)
+uchar AFurniLife::CalculateHistogramThreshold(const cv::Mat& mask)
+{
+    // Calculate histogram
+    int histSize = 256;
+    float range[] = {0, 256};
+    const float* histRange = {range};
+    cv::Mat hist;
+    cv::calcHist(&mask, 1, 0, cv::Mat(), hist, 1, &histSize, &histRange);
+    
+    // Find the valley between two peaks (bimodal distribution)
+    // Smooth histogram first to reduce noise
+    cv::GaussianBlur(hist, hist, cv::Size(1, 5), 0);
+    
+    // Find peaks
+    int peak1 = 0, peak2 = 255;
+    float maxVal1 = 0, maxVal2 = 0;
+    
+    // Find first peak (background)
+    for (int i = 0; i < 128; i++)
+    {
+        float val = hist.at<float>(i);
+        if (val > maxVal1)
+        {
+            maxVal1 = val;
+            peak1 = i;
+        }
+    }
+    
+    // Find second peak (foreground)
+    for (int i = 128; i < 256; i++)
+    {
+        float val = hist.at<float>(i);
+        if (val > maxVal2)
+        {
+            maxVal2 = val;
+            peak2 = i;
+        }
+    }
+    
+    // Find valley between peaks
+    int valley = peak1;
+    float minVal = hist.at<float>(peak1);
+    
+    for (int i = peak1; i <= peak2; i++)
+    {
+        float val = hist.at<float>(i);
+        if (val < minVal)
+        {
+            minVal = val;
+            valley = i;
+        }
+    }
+    
+    return static_cast<uchar>(valley);
+}
+
+// Method 4: Adaptive Mean-based
+uchar AFurniLife::CalculateAdaptiveThreshold(const cv::Mat& mask)
+{
+    // Calculate mean and standard deviation
+    cv::Scalar mean, stddev;
+    cv::meanStdDev(mask, mean, stddev);
+    
+    // For segmentation masks, pixels tend to cluster at extremes
+    // Use mean - k*stddev for conservative foreground detection
+    float k = 0.5f; // Tunable parameter
+    
+    float threshold = mean[0] - k * stddev[0];
+    
+    // Clamp to valid range
+    threshold = std::max(10.0f, std::min(245.0f, threshold));
+    
+    return static_cast<uchar>(threshold);
+}
+
+// Main smart threshold function combining multiple methods
+uchar AFurniLife::CalculateSmartThreshold(const cv::Mat& mask)
+{
+    // Method selection based on mask characteristics
+    cv::Scalar mean, stddev;
+    cv::meanStdDev(mask, mean, stddev);
+    
+    float coefficientOfVariation = stddev[0] / (mean[0] + 1e-6);
+    
+    uchar threshold;
+    
+    if (coefficientOfVariation > 0.8f)
+    {
+        // High variance - likely good separation
+        // Use Otsu's method
+        threshold = CalculateOtsuThreshold(mask);
+        
+        if (bDebugMode)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Using Otsu threshold: %d"), threshold);
+        }
+    }
+    else if (coefficientOfVariation < 0.3f)
+    {
+        // Low variance - poor separation
+        // Use percentile method
+        threshold = CalculatePercentileThreshold(mask);
+        
+        if (bDebugMode)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Using Percentile threshold: %d"), threshold);
+        }
+    }
+    else
+    {
+        // Medium variance - use histogram analysis
+        threshold = CalculateHistogramThreshold(mask);
+        
+        if (bDebugMode)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Using Histogram threshold: %d"), threshold);
+        }
+    }
+    
+    // Confidence-based adjustment
+    float confidence = CalculateSegmentationConfidence(mask, threshold);
+    
+    if (confidence < 0.6f)
+    {
+        // Low confidence - use fallback adaptive method
+        uchar adaptiveThreshold = CalculateAdaptiveThreshold(mask);
+        threshold = static_cast<uchar>(0.7f * threshold + 0.3f * adaptiveThreshold);
+        
+        if (bDebugMode)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Low confidence %.2f, blending with adaptive: %d"),
+                   confidence, threshold);
+        }
+    }
+    
+    return threshold;
+}
+
+// Calculate confidence in the segmentation
+float AFurniLife::CalculateSegmentationConfidence(const cv::Mat& mask, uchar threshold)
+{
+    int foregroundCount = 0;
+    int backgroundCount = 0;
+    int uncertainCount = 0;
+    
+    // Define uncertainty band around threshold
+    int uncertaintyBand = 20;
+    
+    for (int y = 0; y < mask.rows; ++y)
+    {
+        for (int x = 0; x < mask.cols; ++x)
+        {
+            uchar val = mask.at<uchar>(y, x);
+            
+            if (val > threshold + uncertaintyBand)
+            {
+                foregroundCount++;
+            }
+            else if (val < threshold - uncertaintyBand)
+            {
+                backgroundCount++;
+            }
+            else
+            {
+                uncertainCount++;
+            }
+        }
+    }
+    
+    int totalPixels = mask.rows * mask.cols;
+    float uncertainRatio = static_cast<float>(uncertainCount) / totalPixels;
+    
+    // High confidence when few pixels are in uncertainty band
+    float confidence = 1.0f - uncertainRatio;
+    
+    // Also check if we have reasonable foreground/background distribution
+    float foregroundRatio = static_cast<float>(foregroundCount) / totalPixels;
+    
+    if (foregroundRatio < 0.05f || foregroundRatio > 0.95f)
+    {
+        // Extreme ratios indicate poor segmentation
+        confidence *= 0.5f;
+    }
+    
+    return confidence;
+}
+
+// Temporal smoothing to prevent threshold flickering
+uchar AFurniLife::ApplyTemporalSmoothing(uchar currentThreshold)
+{
+    // Keep history of last N thresholds
+    static std::deque<uchar> thresholdHistory;
+    const int historySize = 5;
+    
+    thresholdHistory.push_back(currentThreshold);
+    
+    if (thresholdHistory.size() > historySize)
+    {
+        thresholdHistory.pop_front();
+    }
+    
+    // Use median for stability
+    std::vector<uchar> sortedHistory(thresholdHistory.begin(), thresholdHistory.end());
+    std::sort(sortedHistory.begin(), sortedHistory.end());
+    
+    uchar medianThreshold = sortedHistory[sortedHistory.size() / 2];
+    
+    // Apply exponential moving average for smooth transitions
+    static float smoothedThreshold = -1.0f;
+    
+    if (smoothedThreshold < 0)
+    {
+        smoothedThreshold = medianThreshold;
+    }
+    else
+    {
+        float alpha = 0.3f; // Smoothing factor
+        smoothedThreshold = alpha * medianThreshold + (1.0f - alpha) * smoothedThreshold;
+    }
+    
+    return static_cast<uchar>(smoothedThreshold);
+}
+
+// Add these member variables to AFurniLife class header:
+// private:
+//     bool bDebugMode = false;  // Enable debug logging for threshold selection
+//     std::deque<uchar> thresholdHistory;  // For temporal smoothing
 
 // Stub implementations for unused functions
 void AFurniLife::UpdateTextureSafely()

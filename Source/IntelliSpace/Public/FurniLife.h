@@ -31,6 +31,10 @@
 #include "CoreMLModelBridge.h"
 #endif
 
+#include <deque>
+#include <vector>
+#include <algorithm>
+
 #include "FurniLife.generated.h"
 
 UCLASS()
@@ -128,7 +132,20 @@ private:
     void ApplySegmentationMask();
     void UpdateTextureSafely();
     void AssignTextureToImagePlate();  // Added for iOS fix
-    void UpdateImagePlateTexture(); 
+    void UpdateImagePlateTexture();
+    
+    uchar CalculateSmartThreshold(const cv::Mat& mask);
+    uchar CalculateOtsuThreshold(const cv::Mat& mask);
+    uchar CalculatePercentileThreshold(const cv::Mat& mask);
+    uchar CalculateHistogramThreshold(const cv::Mat& mask);
+    uchar CalculateAdaptiveThreshold(const cv::Mat& mask);
+    float CalculateSegmentationConfidence(const cv::Mat& mask, uchar threshold);
+    uchar ApplyTemporalSmoothing(uchar currentThreshold);
+    
+    // Member variables for threshold calculation
+    bool bDebugMode = false;  // Enable debug logging for threshold selection
+    std::deque<uchar> thresholdHistory;  // For temporal smoothing
+    float smoothedThreshold = -1.0f;  // For exponential moving average
     
 #if PLATFORM_MAC
     TWeakInterfacePtr<INNERuntimeCPU> CpuRuntime;
