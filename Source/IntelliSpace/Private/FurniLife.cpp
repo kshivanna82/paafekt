@@ -515,21 +515,18 @@ void AFurniLife::ApplySegmentationMask()
     cv::Mat binaryMask;
     cv::threshold(normalized, binaryMask, threshold, 255, cv::THRESH_BINARY);
     
-    // IMPROVED HOLE FILLING WITH LARGEST COMPONENT DETECTION
-    
-    // Step 1: Morphological operations to clean up the mask
+    // Morphological operations to clean up the mask
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(7, 7));
     cv::morphologyEx(binaryMask, binaryMask, cv::MORPH_CLOSE, kernel);
     
-    // Small erosion then dilation to remove noise
     cv::Mat smallKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
     cv::morphologyEx(binaryMask, binaryMask, cv::MORPH_OPEN, smallKernel);
     
-    // Step 2: Find all contours
+    // Find all contours
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(binaryMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
     
-    // Step 3: Create filled mask with largest component only
+    // Create filled mask with largest component
     cv::Mat filledMask = cv::Mat::zeros(binaryMask.size(), CV_8UC1);
     
     if (!contours.empty())
@@ -548,10 +545,16 @@ void AFurniLife::ApplySegmentationMask()
             }
         }
         
+        // Get bounding box of the person
+        cv::Rect personBounds = cv::boundingRect(contours[largestIdx]);
+        
+        // DYNAMIC IMAGEPLATE POSITIONING - pass Width and Height as parameters
+        UpdateImagePlatePosition(personBounds, Width, Height);
+        
         // Draw the largest contour filled
         cv::drawContours(filledMask, contours, largestIdx, cv::Scalar(255), cv::FILLED);
         
-        // Optional: Include nearby contours that might be part of the person
+        // Include nearby contours that might be part of the person
         cv::Rect mainBBox = cv::boundingRect(contours[largestIdx]);
         
         // Expand bounding box slightly to catch disconnected parts
@@ -566,11 +569,9 @@ void AFurniLife::ApplySegmentationMask()
             if (i != largestIdx)
             {
                 double area = cv::contourArea(contours[i]);
-                // Only consider contours of reasonable size
                 if (area > 50)
                 {
                     cv::Rect bbox = cv::boundingRect(contours[i]);
-                    // Check if this contour overlaps with expanded main bounding box
                     if ((mainBBox & bbox).area() > 0)
                     {
                         cv::drawContours(filledMask, contours, i, cv::Scalar(255), cv::FILLED);
@@ -580,7 +581,7 @@ void AFurniLife::ApplySegmentationMask()
         }
     }
     
-    // Step 4: Smooth the edges for better visual quality
+    // Smooth the edges for better visual quality
     cv::GaussianBlur(filledMask, filledMask, cv::Size(5, 5), 2);
     
     // Resize to video size
@@ -602,7 +603,6 @@ void AFurniLife::ApplySegmentationMask()
             
             if (alpha < 30)
             {
-                // Background - make green
                 px[0] = 0;   // B
                 px[1] = 255; // G
                 px[2] = 0;   // R
@@ -610,10 +610,7 @@ void AFurniLife::ApplySegmentationMask()
             }
             else if (alpha < 225)
             {
-                // Edge blending zone for smoother transitions
                 float blend = (alpha - 30) / 195.0f;
-                
-                // Interpolate between green and original
                 px[0] = static_cast<uchar>(px[0] * blend);
                 px[1] = static_cast<uchar>(255 * (1 - blend) + px[1] * blend);
                 px[2] = static_cast<uchar>(px[2] * blend);
@@ -621,10 +618,93 @@ void AFurniLife::ApplySegmentationMask()
             }
             else
             {
-                // Foreground - keep original
                 px[3] = 255;
             }
         }
+    }
+}
+
+// Add this new method to your class
+void AFurniLife::UpdateImagePlatePosition(const cv::Rect& personBounds, int maskWidth, int maskHeight)
+{
+    if (!ImagePlatePost)
+        return;
+    
+    // Calculate normalized position (0-1 range)
+    float normalizedX = (personBounds.x + personBounds.width / 2.0f) / maskWidth;
+    float normalizedY = (personBounds.y + personBounds.height / 2.0f) / maskHeight;
+    
+    // Convert to screen space (-1 to 1)
+    float screenX = (normalizedX - 0.5f) * 2.0f;
+    float screenY = (normalizedY - 0.5f) * 2.0f;
+    
+    // Get camera/player position
+    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+    if (!PC || !PC->PlayerCameraManager)
+        return;
+    
+    FVector CameraLocation = PC->PlayerCameraManager->GetCameraLocation();
+    FRotator CameraRotation = PC->PlayerCameraManager->GetCameraRotation();
+    
+    // Calculate world position based on person's location in frame
+    float DistanceFromCamera = 300.0f; // Base distance
+    
+    // Adjust distance based on person size (closer if bigger)
+    float personSizeRatio = (float)(personBounds.width * personBounds.height) / (maskWidth * maskHeight);
+    if (personSizeRatio > 0.3f) // Person takes >30% of frame
+    {
+        DistanceFromCamera = 200.0f; // Closer
+    }
+    else if (personSizeRatio < 0.1f) // Person takes <10% of frame
+    {
+        DistanceFromCamera = 400.0f; // Further
+    }
+    
+    // Calculate position offset based on person location
+    FVector ForwardVector = CameraRotation.Vector();
+    FVector RightVector = FRotator(0, CameraRotation.Yaw, 0).RotateVector(FVector::RightVector);
+    FVector UpVector = FVector::UpVector;
+    
+    // Horizontal offset based on X position
+    float horizontalOffset = screenX * 150.0f; // Adjust multiplier as needed
+    
+    // Vertical offset based on Y position and person height
+    float verticalOffset = -screenY * 100.0f + 100.0f; // Negative because screen Y is inverted
+    
+    // Calculate final position
+    FVector NewPosition = CameraLocation +
+                         ForwardVector * DistanceFromCamera +
+                         RightVector * horizontalOffset +
+                         UpVector * verticalOffset;
+    
+    // Smooth movement using interpolation
+    FVector CurrentPosition = ImagePlatePost->GetComponentLocation();
+    FVector SmoothedPosition = FMath::VInterpTo(CurrentPosition, NewPosition,
+                                                GetWorld()->GetDeltaSeconds(), 5.0f);
+    
+    ImagePlatePost->SetWorldLocation(SmoothedPosition);
+    
+    // Adjust scale based on person size
+    float scaleMultiplier = FMath::Sqrt(personSizeRatio * 10.0f); // Scale based on person size
+    scaleMultiplier = FMath::Clamp(scaleMultiplier, 0.5f, 2.0f);
+    
+    FVector NewScale = FVector(4.0f * scaleMultiplier, 3.0f * scaleMultiplier, 1.0f);
+    FVector CurrentScale = ImagePlatePost->GetRelativeScale3D();
+    FVector SmoothedScale = FMath::VInterpTo(CurrentScale, NewScale,
+                                            GetWorld()->GetDeltaSeconds(), 3.0f);
+    
+    ImagePlatePost->SetRelativeScale3D(SmoothedScale);
+    
+    // Always face the camera
+    ImagePlatePost->SetWorldRotation(CameraRotation);
+    
+    // Debug logging
+    static int LogCounter = 0;
+    if (++LogCounter % 30 == 0) // Log every 30 frames
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Person at (%.2f, %.2f), Size: %.2f%%, ImagePlate at: %s"),
+               normalizedX, normalizedY, personSizeRatio * 100,
+               *SmoothedPosition.ToString());
     }
 }
 
