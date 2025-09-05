@@ -260,7 +260,7 @@ UIImage* UIImageFromCVMat(const cv::Mat& mat)
     NSLog(@"✅ Available output featuresSSSSSSSSSSSSSS: %@", result.featureNames);
 
 
-    MLFeatureValue* feature = [result featureValueForName:@"out_p6"];
+    MLFeatureValue* feature = [result featureValueForName:@"out_p0"];
     if (!feature || feature.type != MLFeatureTypeImage) {
         NSLog(@"❌ Output feature 'out_p6' is missing or not an image.");
         return nil;

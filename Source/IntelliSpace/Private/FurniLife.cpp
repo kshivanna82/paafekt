@@ -182,9 +182,9 @@ void AFurniLife::InitializeCamera()
     Camera_Texture2D->MipGenSettings = TMGS_NoMipmaps;
 #endif
     
-    Camera_Texture2D->SRGB = false;
+    Camera_Texture2D->SRGB = true;
     Camera_Texture2D->AddToRoot();
-    VideoMask_Texture2D->SRGB = false;
+    VideoMask_Texture2D->SRGB = true;
     Camera_Texture2D->UpdateResource();
     
     UE_LOG(LogTemp, Warning, TEXT("✅ Textures created"));
@@ -591,7 +591,7 @@ void AFurniLife::ApplySegmentationMask()
             uchar alpha = alphaMask.at<uchar>(y, x);
             cv::Vec4b& px = frame.at<cv::Vec4b>(y, x);
             
-            if (alpha < 100)
+            if (alpha < threshold)
             {
                 px[0] = 0;   // B
                 px[1] = 255; // G
