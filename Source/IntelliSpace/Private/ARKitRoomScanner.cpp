@@ -1,5 +1,3 @@
-// ARKitRoomScanner.cpp
-
 // Class header MUST be first for Unreal
 #include "ARKitRoomScanner.h"
 
@@ -27,6 +25,12 @@
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
 
+// Redefine for Objective-C use
+#if PLATFORM_IOS
+#define YES 1
+#define NO 0
+#endif
+
 // iOS headers last
 #if PLATFORM_IOS
 #import <ARKit/ARKit.h>
@@ -36,6 +40,8 @@
 @interface ARKitDelegate : NSObject<ARSessionDelegate>
 @property (nonatomic, assign) AARKitRoomScanner* Owner;
 @property (nonatomic, strong) NSMutableArray<ARMeshAnchor*>* meshAnchors;
+@property (nonatomic, strong) NSMutableArray<ARPlaneAnchor*>* planeAnchors;
+@property (nonatomic) BOOL usePlanes;
 @end
 
 @implementation ARKitDelegate
@@ -44,44 +50,91 @@
     self = [super init];
     if (self) {
         self.meshAnchors = [NSMutableArray array];
+        self.planeAnchors = [NSMutableArray array];
+        self.usePlanes = NO;
     }
     return self;
 }
 
 - (void)session:(ARSession *)session didAddAnchors:(NSArray<ARAnchor*>*)anchors {
-    for (ARAnchor* anchor in anchors) {
-        if ([anchor isKindOfClass:[ARMeshAnchor class]]) {
-            ARMeshAnchor* meshAnchor = (ARMeshAnchor*)anchor;
-            [self.meshAnchors addObject:meshAnchor];
-            
-            if (self.Owner) {
-                UE_LOG(LogTemp, Warning, TEXT("ARKit: Mesh anchor added"));
+    @autoreleasepool {
+        for (ARAnchor* anchor in anchors) {
+            if ([anchor isKindOfClass:[ARMeshAnchor class]] && !self.usePlanes) {
+                ARMeshAnchor* meshAnchor = (ARMeshAnchor*)anchor;
+                [self.meshAnchors addObject:meshAnchor];
+                
+                if (self.Owner) {
+                    UE_LOG(LogTemp, Warning, TEXT("ARKit: Mesh anchor added"));
+                }
+            }
+            else if ([anchor isKindOfClass:[ARPlaneAnchor class]]) {
+                ARPlaneAnchor* planeAnchor = (ARPlaneAnchor*)anchor;
+                [self.planeAnchors addObject:planeAnchor];
+                
+                if (self.Owner) {
+                    NSString* alignment = @"Unknown";
+                    if (planeAnchor.alignment == ARPlaneAnchorAlignmentHorizontal) {
+                        alignment = @"Horizontal";
+                    } else if (planeAnchor.alignment == ARPlaneAnchorAlignmentVertical) {
+                        alignment = @"Vertical";
+                    }
+                    
+                    UE_LOG(LogTemp, Warning, TEXT("ARKit: Plane anchor added - %s, Size: %.2f x %.2f"),
+                        *FString(alignment),
+                        planeAnchor.extent.x,
+                        planeAnchor.extent.z);
+                }
             }
         }
     }
 }
 
 - (void)session:(ARSession *)session didUpdateAnchors:(NSArray<ARAnchor*>*)anchors {
-    for (ARAnchor* anchor in anchors) {
-        if ([anchor isKindOfClass:[ARMeshAnchor class]]) {
-            ARMeshAnchor* meshAnchor = (ARMeshAnchor*)anchor;
-            
-            NSUInteger index = [self.meshAnchors indexOfObjectPassingTest:^BOOL(ARMeshAnchor* obj, NSUInteger idx, BOOL* stop) {
-                return [obj.identifier isEqual:meshAnchor.identifier];
-            }];
-            
-            if (index != NSNotFound) {
-                self.meshAnchors[index] = meshAnchor;
+    @autoreleasepool {
+        for (ARAnchor* anchor in anchors) {
+            if ([anchor isKindOfClass:[ARMeshAnchor class]] && !self.usePlanes) {
+                ARMeshAnchor* meshAnchor = (ARMeshAnchor*)anchor;
+                
+                NSUInteger index = [self.meshAnchors indexOfObjectPassingTest:^BOOL(ARMeshAnchor* obj, NSUInteger idx, BOOL* stop) {
+                    return [obj.identifier isEqual:meshAnchor.identifier];
+                }];
+                
+                if (index != NSNotFound) {
+                    self.meshAnchors[index] = meshAnchor;
+                }
+            }
+            else if ([anchor isKindOfClass:[ARPlaneAnchor class]]) {
+                ARPlaneAnchor* planeAnchor = (ARPlaneAnchor*)anchor;
+                
+                NSUInteger index = [self.planeAnchors indexOfObjectPassingTest:^BOOL(ARPlaneAnchor* obj, NSUInteger idx, BOOL* stop) {
+                    return [obj.identifier isEqual:planeAnchor.identifier];
+                }];
+                
+                if (index != NSNotFound) {
+                    self.planeAnchors[index] = planeAnchor;
+                    
+                    if (self.Owner) {
+                        UE_LOG(LogTemp, VeryVerbose, TEXT("ARKit: Plane updated - Size: %.2f x %.2f"),
+                            planeAnchor.extent.x,
+                            planeAnchor.extent.z);
+                    }
+                }
             }
         }
     }
 }
 
 - (void)session:(ARSession *)session didRemoveAnchors:(NSArray<ARAnchor*>*)anchors {
-    for (ARAnchor* anchor in anchors) {
-        if ([anchor isKindOfClass:[ARMeshAnchor class]]) {
-            ARMeshAnchor* meshAnchor = (ARMeshAnchor*)anchor;
-            [self.meshAnchors removeObject:meshAnchor];
+    @autoreleasepool {
+        for (ARAnchor* anchor in anchors) {
+            if ([anchor isKindOfClass:[ARMeshAnchor class]]) {
+                ARMeshAnchor* meshAnchor = (ARMeshAnchor*)anchor;
+                [self.meshAnchors removeObject:meshAnchor];
+            }
+            else if ([anchor isKindOfClass:[ARPlaneAnchor class]]) {
+                ARPlaneAnchor* planeAnchor = (ARPlaneAnchor*)anchor;
+                [self.planeAnchors removeObject:planeAnchor];
+            }
         }
     }
 }
@@ -103,7 +156,7 @@ AARKitRoomScanner::AARKitRoomScanner()
     ARSession = nullptr;
     ARDelegate = nullptr;
     TimeSinceLastUpdate = 0.0f;
-    MeshUpdateInterval = 0.5f;
+    MeshUpdateInterval = 1.0f;
     
     cameraFrame = new cv::Mat();
     
@@ -133,7 +186,6 @@ void AARKitRoomScanner::BeginPlay()
     // Position camera preview
     if (CameraPreviewPlate)
     {
-        // Position in front of player, visible area
         CameraPreviewPlate->SetRelativeLocation(FVector(500, 0, 100));
         CameraPreviewPlate->SetRelativeScale3D(FVector(3.0f, 2.0f, 1.0f));
         CameraPreviewPlate->SetVisibility(true);
@@ -166,16 +218,20 @@ void AARKitRoomScanner::BeginPlay()
         
         ARKitDelegate* delegate = [[ARKitDelegate alloc] init];
         delegate.Owner = this;
+        
+        // Check for scene reconstruction support
+        if ([ARWorldTrackingConfiguration supportsSceneReconstruction:ARSceneReconstructionMesh]) {
+            delegate.usePlanes = NO;
+            UE_LOG(LogTemp, Warning, TEXT("✅ Scene reconstruction supported (LiDAR detected) - Using mesh capture"));
+        } else {
+            delegate.usePlanes = YES;
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ Scene reconstruction not supported (no LiDAR) - Using plane detection"));
+        }
+        
         [(id)ARSession setDelegate:delegate];
         ARDelegate = (void*)delegate;
         
         UE_LOG(LogTemp, Warning, TEXT("✅ ARKit initialized"));
-        
-        if ([ARWorldTrackingConfiguration supportsSceneReconstruction:ARSceneReconstructionMesh]) {
-            UE_LOG(LogTemp, Warning, TEXT("✅ Scene reconstruction supported (LiDAR detected)"));
-        } else {
-            UE_LOG(LogTemp, Warning, TEXT("⚠️ Scene reconstruction not supported (no LiDAR)"));
-        }
     } else {
         UE_LOG(LogTemp, Error, TEXT("❌ ARKit not supported on this device"));
     }
@@ -194,8 +250,10 @@ void AARKitRoomScanner::EndPlay(const EEndPlayReason::Type EndPlayReason)
     
 #if PLATFORM_IOS
     if (ARSession) {
-        [(id)ARSession pause];
-        ARSession = nullptr;
+        @autoreleasepool {
+            [(id)ARSession pause];
+            ARSession = nullptr;
+        }
     }
     
     if (ARDelegate) {
@@ -213,9 +271,13 @@ void AARKitRoomScanner::Tick(float DeltaTime)
     
     if (bIsScanning)
     {
-        UpdateCameraFrame();
-        
         TimeSinceLastUpdate += DeltaTime;
+        
+        if (TimeSinceLastUpdate >= 0.1f)
+        {
+            UpdateCameraFrame();
+        }
+        
         if (TimeSinceLastUpdate >= MeshUpdateInterval)
         {
             TimeSinceLastUpdate = 0.0f;
@@ -241,21 +303,27 @@ void AARKitRoomScanner::StartScanning()
         return;
     }
     
-    ARWorldTrackingConfiguration* config = [[ARWorldTrackingConfiguration alloc] init];
-    
-    if ([ARWorldTrackingConfiguration supportsSceneReconstruction:ARSceneReconstructionMesh]) {
-        config.sceneReconstruction = ARSceneReconstructionMesh;
-        UE_LOG(LogTemp, Warning, TEXT("Scene reconstruction enabled"));
+    @autoreleasepool {
+        ARWorldTrackingConfiguration* config = [[ARWorldTrackingConfiguration alloc] init];
+        
+        ARKitDelegate* delegate = (ARKitDelegate*)ARDelegate;
+        
+        if (!delegate.usePlanes && [ARWorldTrackingConfiguration supportsSceneReconstruction:ARSceneReconstructionMesh]) {
+            config.sceneReconstruction = ARSceneReconstructionMesh;
+            UE_LOG(LogTemp, Warning, TEXT("Scene reconstruction enabled (mesh mode)"));
+        } else {
+            // Use plane detection for non-LiDAR devices
+            config.planeDetection = ARPlaneDetectionHorizontal | ARPlaneDetectionVertical;
+            UE_LOG(LogTemp, Warning, TEXT("Plane detection enabled (non-LiDAR mode)"));
+        }
+        
+        config.environmentTexturing = AREnvironmentTexturingAutomatic;
+        config.lightEstimationEnabled = true;
+        
+        [(id)ARSession runWithConfiguration:config];
+        bIsScanning = true;
     }
     
-    config.planeDetection = ARPlaneDetectionHorizontal | ARPlaneDetectionVertical;
-    config.environmentTexturing = AREnvironmentTexturingAutomatic;
-    config.lightEstimationEnabled = true;
-    
-    [(id)ARSession runWithConfiguration:config];
-    bIsScanning = true;
-    
-    // Make sure camera preview is visible
     if (CameraPreviewPlate)
     {
         CameraPreviewPlate->SetVisibility(true);
@@ -266,7 +334,7 @@ void AARKitRoomScanner::StartScanning()
     UE_LOG(LogTemp, Warning, TEXT("✅ ARKit scanning started successfully"));
 #else
     UE_LOG(LogTemp, Warning, TEXT("StartScanning called but not on iOS"));
-    bIsScanning = true; // For testing in editor
+    bIsScanning = true;
 #endif
 }
 
@@ -287,8 +355,10 @@ void AARKitRoomScanner::StopScanning()
         return;
     }
     
-    [(id)ARSession pause];
-    bIsScanning = false;
+    @autoreleasepool {
+        [(id)ARSession pause];
+        bIsScanning = false;
+    }
     
     UE_LOG(LogTemp, Warning, TEXT("✅ ARKit scanning stopped. Vertices: %d, Triangles: %d"),
         CurrentMeshData.VertexCount, CurrentMeshData.TriangleCount);
@@ -335,73 +405,70 @@ void AARKitRoomScanner::UpdateCameraFrame()
 #if PLATFORM_IOS
     if (!ARSession) return;
     
-    id sessionObj = (id)ARSession;
-    ARFrame* currentFrame = [sessionObj currentFrame];
-    
-    if (currentFrame && currentFrame.capturedImage)
-    {
-        // Log occasionally to avoid spam
-        static int frameCount = 0;
-        if (frameCount++ % 30 == 0) // Log every 30 frames
+    @autoreleasepool {
+        id sessionObj = (id)ARSession;
+        ARFrame* currentFrame = [sessionObj currentFrame];
+        
+        if (currentFrame && currentFrame.capturedImage)
         {
-            UE_LOG(LogTemp, VeryVerbose, TEXT("Camera frame updating (frame %d)"), frameCount);
-        }
-        
-        CVPixelBufferRef pixelBuffer = currentFrame.capturedImage;
-        
-        CVPixelBufferLockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
-        
-        size_t width = CVPixelBufferGetWidth(pixelBuffer);
-        size_t height = CVPixelBufferGetHeight(pixelBuffer);
-        
-        void* yPlane = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0);
-        size_t yBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0);
-        
-        if (CameraTexture && yPlane)
-        {
-            if (CameraTexture->GetSizeX() != width || CameraTexture->GetSizeY() != height)
-            {
-                CameraTexture->RemoveFromRoot();
-                CameraTexture = UTexture2D::CreateTransient(width, height, PF_B8G8R8A8);
-                CameraTexture->SRGB = true;
-                CameraTexture->AddToRoot();
-                CameraColorData.SetNumUninitialized(width * height);
-                
-                if (CameraMaterial)
-                {
-                    CameraMaterial->SetTextureParameterValue(FName("Texture"), CameraTexture);
-                }
-                
-                UE_LOG(LogTemp, Warning, TEXT("Camera texture resized to %dx%d"), width, height);
-            }
+            CVPixelBufferRef pixelBuffer = currentFrame.capturedImage;
             
-            FTexture2DMipMap& Mip = CameraTexture->GetPlatformData()->Mips[0];
-            void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
+            CVPixelBufferLockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
             
-            if (Data)
+            size_t width = CVPixelBufferGetWidth(pixelBuffer);
+            size_t height = CVPixelBufferGetHeight(pixelBuffer);
+            
+            if (width > 0 && height > 0)
             {
-                uint8* DestPtr = (uint8*)Data;
-                uint8* SrcPtr = (uint8*)yPlane;
+                void* yPlane = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0);
+                size_t yBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0);
                 
-                for (size_t y = 0; y < height; y++)
+                if (CameraTexture && yPlane)
                 {
-                    for (size_t x = 0; x < width; x++)
+                    if (CameraTexture->GetSizeX() != width || CameraTexture->GetSizeY() != height)
                     {
-                        uint8 luma = SrcPtr[y * yBytesPerRow + x];
+                        CameraTexture->RemoveFromRoot();
+                        CameraTexture = UTexture2D::CreateTransient(width, height, PF_B8G8R8A8);
+                        CameraTexture->SRGB = true;
+                        CameraTexture->AddToRoot();
+                        CameraColorData.SetNumUninitialized(width * height);
                         
-                        *DestPtr++ = luma; // B
-                        *DestPtr++ = luma; // G
-                        *DestPtr++ = luma; // R
-                        *DestPtr++ = 255;  // A
+                        if (CameraMaterial)
+                        {
+                            CameraMaterial->SetTextureParameterValue(FName("Texture"), CameraTexture);
+                        }
+                    }
+                    
+                    FTexture2DMipMap& Mip = CameraTexture->GetPlatformData()->Mips[0];
+                    void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
+                    
+                    if (Data)
+                    {
+                        uint8* DestPtr = (uint8*)Data;
+                        uint8* SrcPtr = (uint8*)yPlane;
+                        
+                        for (size_t y = 0; y < height; y++)
+                        {
+                            for (size_t x = 0; x < width; x++)
+                            {
+                                uint8 luma = SrcPtr[y * yBytesPerRow + x];
+                                *DestPtr++ = luma;
+                                *DestPtr++ = luma;
+                                *DestPtr++ = luma;
+                                *DestPtr++ = 255;
+                            }
+                        }
+                        
+                        Mip.BulkData.Unlock();
+                        CameraTexture->UpdateResource();
                     }
                 }
-                
-                Mip.BulkData.Unlock();
-                CameraTexture->UpdateResource();
             }
+            
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
         }
         
-        CVPixelBufferUnlockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
+        currentFrame = nil;
     }
 #endif
 }
@@ -411,133 +478,190 @@ void AARKitRoomScanner::UpdateMeshFromARKit()
 #if PLATFORM_IOS
     if (!ARDelegate) return;
     
-    ARKitDelegate* delegate = (ARKitDelegate*)ARDelegate;
-    
-    CurrentMeshData.Vertices.Empty();
-    CurrentMeshData.Triangles.Empty();
-    CurrentMeshData.Normals.Empty();
-    
-    int32 vertexOffset = 0;
-    int32 meshAnchorCount = delegate.meshAnchors.count;
-    
-    if (meshAnchorCount > 0)
-    {
-        UE_LOG(LogTemp, VeryVerbose, TEXT("Processing %d mesh anchors"), meshAnchorCount);
-    }
-    
-    for (ARMeshAnchor* meshAnchor in delegate.meshAnchors) {
-        ARMeshGeometry* geometry = meshAnchor.geometry;
+    @autoreleasepool {
+        ARKitDelegate* delegate = (ARKitDelegate*)ARDelegate;
         
-        if (!geometry) continue;
+        CurrentMeshData.Vertices.Empty();
+        CurrentMeshData.Triangles.Empty();
+        CurrentMeshData.Normals.Empty();
         
-        // Get vertex data from Metal buffer
-        ARGeometrySource* vertexSource = geometry.vertices;
-        NSInteger vertexCount = vertexSource.count;
-        id<MTLBuffer> vertexBuffer = vertexSource.buffer;
-        const simd_float3* vertices = (const simd_float3*)[vertexBuffer contents];
+        int32 vertexOffset = 0;
         
-        // Get face data from Metal buffer
-        ARGeometryElement* faceSource = geometry.faces;
-        NSInteger faceCount = faceSource.count;
-        id<MTLBuffer> faceBuffer = faceSource.buffer;
-        
-        // Handle different index types
-        const void* faceBytes = [faceBuffer contents];
-        
-        // Get normals if available
-        const simd_float3* normals = nullptr;
-        if (geometry.normals) {
-            ARGeometrySource* normalSource = geometry.normals;
-            id<MTLBuffer> normalBuffer = normalSource.buffer;
-            normals = (const simd_float3*)[normalBuffer contents];
+        // Check if we should use planes or meshes
+        if (delegate.usePlanes)
+        {
+            // Process plane anchors for non-LiDAR devices
+            int32 planeCount = delegate.planeAnchors.count;
+            
+            if (planeCount > 0)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Processing %d plane anchors"), planeCount);
+            }
+            
+            for (ARPlaneAnchor* planeAnchor in delegate.planeAnchors)
+            {
+                // Get plane properties
+                simd_float3 center = planeAnchor.center;
+                simd_float3 extent = planeAnchor.extent;
+                simd_float4x4 transform = planeAnchor.transform;
+                
+                // Create a simple quad for each plane
+                float halfWidth = extent.x / 2.0f;
+                float halfHeight = extent.z / 2.0f;
+                
+                // Define 4 corners of the plane
+                simd_float3 corners[4] = {
+                    simd_make_float3(center.x - halfWidth, center.y, center.z - halfHeight),
+                    simd_make_float3(center.x + halfWidth, center.y, center.z - halfHeight),
+                    simd_make_float3(center.x + halfWidth, center.y, center.z + halfHeight),
+                    simd_make_float3(center.x - halfWidth, center.y, center.z + halfHeight)
+                };
+                
+                // Transform and add vertices
+                for (int i = 0; i < 4; i++)
+                {
+                    simd_float4 vertex4 = simd_make_float4(corners[i].x, corners[i].y, corners[i].z, 1.0f);
+                    simd_float4 transformedVertex = simd_mul(transform, vertex4);
+                    
+                    FVector unrealVertex(
+                        transformedVertex.x * 100.0f,
+                        transformedVertex.z * 100.0f,
+                        transformedVertex.y * 100.0f
+                    );
+                    
+                    CurrentMeshData.Vertices.Add(unrealVertex);
+                    
+                    // Add normal (pointing up for horizontal planes, forward for vertical)
+                    FVector normal = (planeAnchor.alignment == ARPlaneAnchorAlignmentHorizontal)
+                        ? FVector(0, 0, 1)
+                        : FVector(1, 0, 0);
+                    CurrentMeshData.Normals.Add(normal);
+                }
+                
+                // Add two triangles to form a quad
+                CurrentMeshData.Triangles.Add(vertexOffset + 0);
+                CurrentMeshData.Triangles.Add(vertexOffset + 1);
+                CurrentMeshData.Triangles.Add(vertexOffset + 2);
+                
+                CurrentMeshData.Triangles.Add(vertexOffset + 0);
+                CurrentMeshData.Triangles.Add(vertexOffset + 2);
+                CurrentMeshData.Triangles.Add(vertexOffset + 3);
+                
+                vertexOffset += 4;
+            }
+        }
+        else
+        {
+            // Process mesh anchors for LiDAR devices (original code)
+            int32 meshAnchorCount = delegate.meshAnchors.count;
+            
+            if (meshAnchorCount > 0)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Processing %d mesh anchors"), meshAnchorCount);
+            }
+            
+            for (ARMeshAnchor* meshAnchor in delegate.meshAnchors) {
+                ARMeshGeometry* geometry = meshAnchor.geometry;
+                
+                if (!geometry) continue;
+                
+                ARGeometrySource* vertexSource = geometry.vertices;
+                NSInteger vertexCount = vertexSource.count;
+                id<MTLBuffer> vertexBuffer = vertexSource.buffer;
+                const simd_float3* vertices = (const simd_float3*)[vertexBuffer contents];
+                
+                ARGeometryElement* faceSource = geometry.faces;
+                NSInteger faceCount = faceSource.count;
+                id<MTLBuffer> faceBuffer = faceSource.buffer;
+                const void* faceBytes = [faceBuffer contents];
+                
+                const simd_float3* normals = nullptr;
+                if (geometry.normals) {
+                    ARGeometrySource* normalSource = geometry.normals;
+                    id<MTLBuffer> normalBuffer = normalSource.buffer;
+                    normals = (const simd_float3*)[normalBuffer contents];
+                }
+                
+                simd_float4x4 transform = meshAnchor.transform;
+                
+                for (NSInteger i = 0; i < vertexCount; i++) {
+                    simd_float3 vertex = vertices[i];
+                    simd_float4 vertex4 = simd_make_float4(vertex.x, vertex.y, vertex.z, 1.0f);
+                    simd_float4 transformedVertex = simd_mul(transform, vertex4);
+                    
+                    FVector unrealVertex(
+                        transformedVertex.x * 100.0f,
+                        transformedVertex.z * 100.0f,
+                        transformedVertex.y * 100.0f
+                    );
+                    
+                    CurrentMeshData.Vertices.Add(unrealVertex);
+                    
+                    if (normals) {
+                        simd_float3 normal = normals[i];
+                        FVector unrealNormal(normal.x, normal.z, normal.y);
+                        CurrentMeshData.Normals.Add(unrealNormal);
+                    } else {
+                        CurrentMeshData.Normals.Add(FVector(0, 0, 1));
+                    }
+                }
+                
+                if (faceSource.bytesPerIndex == 2) {
+                    const uint16_t* indices = (const uint16_t*)faceBytes;
+                    for (NSInteger i = 0; i < faceCount * 3; i += 3) {
+                        CurrentMeshData.Triangles.Add(vertexOffset + indices[i]);
+                        CurrentMeshData.Triangles.Add(vertexOffset + indices[i + 2]);
+                        CurrentMeshData.Triangles.Add(vertexOffset + indices[i + 1]);
+                    }
+                } else if (faceSource.bytesPerIndex == 4) {
+                    const uint32_t* indices = (const uint32_t*)faceBytes;
+                    for (NSInteger i = 0; i < faceCount * 3; i += 3) {
+                        CurrentMeshData.Triangles.Add(vertexOffset + indices[i]);
+                        CurrentMeshData.Triangles.Add(vertexOffset + indices[i + 2]);
+                        CurrentMeshData.Triangles.Add(vertexOffset + indices[i + 1]);
+                    }
+                }
+                
+                vertexOffset += vertexCount;
+            }
         }
         
-        // Transform matrix
-        simd_float4x4 transform = meshAnchor.transform;
+        CurrentMeshData.VertexCount = CurrentMeshData.Vertices.Num();
+        CurrentMeshData.TriangleCount = CurrentMeshData.Triangles.Num() / 3;
         
-        // Add vertices
-        for (NSInteger i = 0; i < vertexCount; i++) {
-            simd_float3 vertex = vertices[i];
+        if (ProceduralMesh && CurrentMeshData.Vertices.Num() > 0)
+        {
+            ProceduralMesh->ClearAllMeshSections();
             
-            // Proper matrix multiplication
-            simd_float4 vertex4 = simd_make_float4(vertex.x, vertex.y, vertex.z, 1.0f);
-            simd_float4 transformedVertex = simd_mul(transform, vertex4);
+            TArray<FVector2D> UV0;
+            TArray<FColor> VertexColors;
+            TArray<FProcMeshTangent> Tangents;
             
-            // Convert to Unreal coordinates
-            FVector unrealVertex(
-                transformedVertex.x * 100.0f,
-                transformedVertex.z * 100.0f,
-                transformedVertex.y * 100.0f
+            for (int32 i = 0; i < CurrentMeshData.Vertices.Num(); i++)
+            {
+                UV0.Add(FVector2D(0, 0));
+                VertexColors.Add(FColor::White);
+            }
+            
+            ProceduralMesh->CreateMeshSection(
+                0,
+                CurrentMeshData.Vertices,
+                CurrentMeshData.Triangles,
+                CurrentMeshData.Normals,
+                UV0,
+                VertexColors,
+                Tangents,
+                true
             );
             
-            CurrentMeshData.Vertices.Add(unrealVertex);
+            if (MeshMaterial)
+            {
+                ProceduralMesh->SetMaterial(0, MeshMaterial);
+            }
             
-            if (normals) {
-                simd_float3 normal = normals[i];
-                FVector unrealNormal(normal.x, normal.z, normal.y);
-                CurrentMeshData.Normals.Add(unrealNormal);
-            } else {
-                CurrentMeshData.Normals.Add(FVector(0, 0, 1));
-            }
+            UE_LOG(LogTemp, Warning, TEXT("Mesh updated: %d vertices, %d triangles"),
+                CurrentMeshData.VertexCount, CurrentMeshData.TriangleCount);
         }
-        
-        // Add triangles based on index size
-        if (faceSource.bytesPerIndex == 2) {
-            // 16-bit indices
-            const uint16_t* indices = (const uint16_t*)faceBytes;
-            for (NSInteger i = 0; i < faceCount * 3; i += 3) {
-                CurrentMeshData.Triangles.Add(vertexOffset + indices[i]);
-                CurrentMeshData.Triangles.Add(vertexOffset + indices[i + 2]);
-                CurrentMeshData.Triangles.Add(vertexOffset + indices[i + 1]);
-            }
-        } else if (faceSource.bytesPerIndex == 4) {
-            // 32-bit indices
-            const uint32_t* indices = (const uint32_t*)faceBytes;
-            for (NSInteger i = 0; i < faceCount * 3; i += 3) {
-                CurrentMeshData.Triangles.Add(vertexOffset + indices[i]);
-                CurrentMeshData.Triangles.Add(vertexOffset + indices[i + 2]);
-                CurrentMeshData.Triangles.Add(vertexOffset + indices[i + 1]);
-            }
-        }
-        
-        vertexOffset += vertexCount;
-    }
-    
-    CurrentMeshData.VertexCount = CurrentMeshData.Vertices.Num();
-    CurrentMeshData.TriangleCount = CurrentMeshData.Triangles.Num() / 3;
-    
-    if (ProceduralMesh && CurrentMeshData.Vertices.Num() > 0)
-    {
-        ProceduralMesh->ClearAllMeshSections();
-        
-        TArray<FVector2D> UV0;
-        TArray<FColor> VertexColors;
-        TArray<FProcMeshTangent> Tangents;
-        
-        for (int32 i = 0; i < CurrentMeshData.Vertices.Num(); i++)
-        {
-            UV0.Add(FVector2D(0, 0));
-            VertexColors.Add(FColor::White);
-        }
-        
-        ProceduralMesh->CreateMeshSection(
-            0,
-            CurrentMeshData.Vertices,
-            CurrentMeshData.Triangles,
-            CurrentMeshData.Normals,
-            UV0,
-            VertexColors,
-            Tangents,
-            true
-        );
-        
-        if (MeshMaterial)
-        {
-            ProceduralMesh->SetMaterial(0, MeshMaterial);
-        }
-        
-        UE_LOG(LogTemp, VeryVerbose, TEXT("Mesh updated: %d vertices, %d triangles"),
-            CurrentMeshData.VertexCount, CurrentMeshData.TriangleCount);
     }
 #endif
 }
@@ -599,9 +723,6 @@ void AARKitRoomScanner::CreateHUD()
     if (!HUDWidgetClass)
     {
         UE_LOG(LogTemp, Error, TEXT("❌ HUDWidgetClass is NULL - Set it in the actor details panel!"));
-        UE_LOG(LogTemp, Error, TEXT("   1. Select ARKitRoomScanner in the level"));
-        UE_LOG(LogTemp, Error, TEXT("   2. In Details panel, find 'UI' section"));
-        UE_LOG(LogTemp, Error, TEXT("   3. Set 'HUD Widget Class' to BP_ScannerHUD"));
         return;
     }
     
@@ -610,7 +731,6 @@ void AARKitRoomScanner::CreateHUD()
     {
         Widget->AddToViewport();
         UE_LOG(LogTemp, Warning, TEXT("✅ HUD Widget created and added to viewport"));
-        UE_LOG(LogTemp, Warning, TEXT("   Widget class: %s"), *HUDWidgetClass->GetName());
     }
     else
     {

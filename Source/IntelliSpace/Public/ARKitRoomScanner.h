@@ -33,7 +33,7 @@ struct FARMeshData
     int32 TriangleCount = 0;
 };
 
-UCLASS()
+UCLASS(Blueprintable, BlueprintType)
 class INTELLISPACE_API AARKitRoomScanner : public AActor
 {
     GENERATED_BODY()
