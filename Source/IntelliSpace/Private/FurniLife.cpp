@@ -50,6 +50,7 @@ AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(Obje
     isStreamOpen = false;
     VideoSize = FVector2D(1920, 1080);
     RefreshRate = 30.0f;
+    RoomMeshScale = 100.0f;
 }
 
 void AFurniLife::BeginPlay()
@@ -140,28 +141,28 @@ void AFurniLife::InitializeCamera()
     // Open camera
     cap.open(CameraID);
     if (!cap.isOpened()) {
-        UE_LOG(LogTemp, Error, TEXT("❌ Failed to open camera with ID %d"), CameraID);
+        UE_LOG(LogTemp, Error, TEXT("Failed to open camera with ID %d"), CameraID);
         
 #if PLATFORM_IOS
         for (int i = 0; i < 3; i++) {
             UE_LOG(LogTemp, Warning, TEXT("Trying camera ID %d..."), i);
             cap.open(i);
             if (cap.isOpened()) {
-                UE_LOG(LogTemp, Warning, TEXT("✅ Camera opened with ID %d"), i);
+                UE_LOG(LogTemp, Warning, TEXT("Camera opened with ID %d"), i);
                 CameraID = i;
                 break;
             }
         }
         
         if (!cap.isOpened()) {
-            UE_LOG(LogTemp, Error, TEXT("❌ Failed to open any camera"));
+            UE_LOG(LogTemp, Error, TEXT("Failed to open any camera"));
             return;
         }
 #else
         return;
 #endif
     } else {
-        UE_LOG(LogTemp, Warning, TEXT("✅ Camera opened successfully with ID %d"), CameraID);
+        UE_LOG(LogTemp, Warning, TEXT("Camera opened successfully with ID %d"), CameraID);
     }
     
     cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
@@ -181,9 +182,8 @@ void AFurniLife::InitializeCamera()
     }
 #endif
     
-    // ALWAYS set isStreamOpen to true if camera opened
     isStreamOpen = true;
-    UE_LOG(LogTemp, Warning, TEXT("✅ isStreamOpen set to true"));
+    UE_LOG(LogTemp, Warning, TEXT("isStreamOpen set to true"));
     
     // Initialize buffers
     ColorData.SetNumUninitialized(VideoSize.X * VideoSize.Y);
@@ -195,7 +195,7 @@ void AFurniLife::InitializeCamera()
     VideoMask_Texture2D = UTexture2D::CreateTransient(VideoSize.X, VideoSize.Y, PF_G8);
     
     if (!Camera_Texture2D) {
-        UE_LOG(LogTemp, Error, TEXT("❌ Failed to create Camera_Texture2D"));
+        UE_LOG(LogTemp, Error, TEXT("Failed to create Camera_Texture2D"));
         isStreamOpen = false;
         return;
     }
@@ -209,7 +209,7 @@ void AFurniLife::InitializeCamera()
     VideoMask_Texture2D->SRGB = true;
     Camera_Texture2D->UpdateResource();
     
-    UE_LOG(LogTemp, Warning, TEXT("✅ Textures created"));
+    UE_LOG(LogTemp, Warning, TEXT("Textures created"));
     
     // Create ImagePlate dynamically
     if (!ImagePlatePost)
@@ -222,7 +222,7 @@ void AFurniLife::InitializeCamera()
         ImagePlatePost->SetVisibility(true);
         ImagePlatePost->SetHiddenInGame(false);
         
-        UE_LOG(LogTemp, Warning, TEXT("✅ Created ImagePlate dynamically"));
+        UE_LOG(LogTemp, Warning, TEXT("Created ImagePlate dynamically"));
     }
     
     // Position ImagePlate properly
@@ -237,12 +237,12 @@ void AFurniLife::InitializeCamera()
             ImagePlatePost->SetWorldLocation(PlacementLocation);
             ImagePlatePost->SetWorldRotation(PlayerStart->GetActorRotation());
             
-            // Use SetRelativeScale3D to avoid scale issues
+            // Set correct scale
             ImagePlatePost->SetRelativeScale3D(FVector(4.0f, 3.0f, 1.0f));
             
-            UE_LOG(LogTemp, Warning, TEXT("ImagePlate positioned at: %s with scale: %s"),
-                   *PlacementLocation.ToString(),
-                   *ImagePlatePost->GetComponentScale().ToString());
+            UE_LOG(LogTemp, Warning, TEXT("ImagePlate positioned at: %s"),
+                   *PlacementLocation.ToString());
+            UE_LOG(LogTemp, Warning, TEXT("ImagePlate scale set to: X=4.0 Y=3.0 Z=1.0"));
             
             // Load your M_CameraFeed material
             UMaterialInterface* BaseMaterial = LoadObject<UMaterialInterface>(nullptr,
@@ -255,48 +255,315 @@ void AFurniLife::InitializeCamera()
                 
                 if (Camera_Texture2D)
                 {
-                    // Set the texture parameter - use the exact name from your material
                     Camera_MatPost->SetTextureParameterValue(FName("Texture"), Camera_Texture2D);
                 }
                 
-                UE_LOG(LogTemp, Warning, TEXT("✅ M_CameraFeed material loaded and texture set"));
+                UE_LOG(LogTemp, Warning, TEXT("M_CameraFeed material loaded and texture set"));
             }
             else
             {
-                UE_LOG(LogTemp, Error, TEXT("❌ Failed to load M_CameraFeed material - check the path"));
+                UE_LOG(LogTemp, Error, TEXT("Failed to load M_CameraFeed material - check the path"));
             }
         }
         break;
     }
     
-    // Position room mesh if it exists
+    // Position room mesh if it exists - Use GetComponentLocation
     if (RoomMesh && ImagePlatePost)
     {
         FVector PlateLocation = ImagePlatePost->GetComponentLocation();
         RoomMesh->SetWorldLocation(PlateLocation);
         RoomMesh->SetWorldRotation(ImagePlatePost->GetComponentRotation());
         
-        UE_LOG(LogTemp, Warning, TEXT("Room mesh positioned with ImagePlate"));
+        UE_LOG(LogTemp, Warning, TEXT("Room mesh positioned with ImagePlate at: %s"),
+            *PlateLocation.ToString());
     }
     
 #if PLATFORM_IOS
     // Load CoreML model
     NSString* ModelPath = [[NSBundle mainBundle] pathForResource:@"u2net" ofType:@"mlmodelc"];
     if (!ModelPath) {
-        UE_LOG(LogTemp, Error, TEXT("❌ Could not find u2net.mlmodelc in bundle."));
+        UE_LOG(LogTemp, Error, TEXT("Could not find u2net.mlmodelc in bundle."));
     } else if (!GetSharedBridge()->LoadModel([ModelPath UTF8String])) {
-        UE_LOG(LogTemp, Error, TEXT("❌ Failed to load CoreML model."));
+        UE_LOG(LogTemp, Error, TEXT("Failed to load CoreML model."));
     } else {
-        UE_LOG(LogTemp, Warning, TEXT("✅ CoreML model loaded"));
+        UE_LOG(LogTemp, Warning, TEXT("CoreML model loaded"));
     }
 #endif
     
-    UE_LOG(LogTemp, Warning, TEXT("✅ Camera initialization complete"));
+    UE_LOG(LogTemp, Warning, TEXT("Camera initialization complete"));
 }
+
+//void AFurniLife::LoadRoomMeshFromFile(const FString& OBJFileName)
+//{
+//    // Construct file path - try multiple locations
+//    TArray<FString> PossiblePaths = {
+//        FPaths::ProjectSavedDir() / TEXT("ExportedMeshes") / (OBJFileName + TEXT(".obj")),
+//        FPaths::ProjectContentDir() / TEXT("Models") / (OBJFileName + TEXT(".obj")),
+//        FPaths::ProjectContentDir() / (OBJFileName + TEXT(".obj")),
+//        FPaths::ProjectDir() / (OBJFileName + TEXT(".obj"))
+//    };
+//    
+//    FString FilePath;
+//    bool bFileFound = false;
+//    
+//    for (const FString& Path : PossiblePaths)
+//    {
+//        if (FPaths::FileExists(Path))
+//        {
+//            FilePath = Path;
+//            bFileFound = true;
+//            UE_LOG(LogTemp, Warning, TEXT("Found OBJ file at: %s"), *FilePath);
+//            break;
+//        }
+//    }
+//    
+//    if (!bFileFound)
+//    {
+//        UE_LOG(LogTemp, Error, TEXT("OBJ file '%s' not found. Tried paths:"), *OBJFileName);
+//        for (const FString& Path : PossiblePaths)
+//        {
+//            UE_LOG(LogTemp, Error, TEXT("  - %s"), *Path);
+//        }
+//        return;
+//    }
+//    
+//    TArray<FVector> Vertices;
+//    TArray<int32> Triangles;
+//    TArray<FVector> Normals;
+//    
+//    if (ParseOBJFile(FilePath, Vertices, Triangles, Normals))
+//    {
+//        if (RoomMesh)
+//        {
+//            RoomMesh->ClearAllMeshSections();
+//            
+//            // Scale the mesh to reasonable size (make it bigger for visibility)
+//            float ScaleFactor = 10.0f; // Make it much bigger for testing
+//            for (FVector& Vertex : Vertices)
+//            {
+//                Vertex *= ScaleFactor;
+//            }
+//            
+//            // Calculate bounds for debugging AFTER scaling
+//            FBox Bounds(Vertices);
+//            FVector BoundsSize = Bounds.GetSize();
+//            FVector BoundsCenter = Bounds.GetCenter();
+//            
+//            UE_LOG(LogTemp, Warning, TEXT("After scaling (factor %.3f):"), ScaleFactor);
+//            UE_LOG(LogTemp, Warning, TEXT("   Vertices count: %d"), Vertices.Num());
+//            UE_LOG(LogTemp, Warning, TEXT("   Mesh bounds size: %s"), *BoundsSize.ToString());
+//            UE_LOG(LogTemp, Warning, TEXT("   Mesh bounds center: %s"), *BoundsCenter.ToString());
+//            
+//            // Create mesh arrays
+//            TArray<FVector2D> UV0;
+//            TArray<FColor> VertexColors;
+//            TArray<FProcMeshTangent> Tangents;
+//            
+//            for (int32 i = 0; i < Vertices.Num(); i++)
+//            {
+//                UV0.Add(FVector2D(0, 0));
+//                // Bright RED for maximum visibility
+//                VertexColors.Add(FColor::Red);
+//            }
+//            
+//            // Create the mesh section
+//            RoomMesh->CreateMeshSection(
+//                0,
+//                Vertices,
+//                Triangles,
+//                Normals,
+//                UV0,
+//                VertexColors,
+//                Tangents,
+//                false
+//            );
+//            
+//            // Use a simple unlit material
+//            UMaterial* UnlitMaterial = LoadObject<UMaterial>(nullptr,
+//                TEXT("/Engine/EngineMaterials/WorldGridMaterial"));
+//            
+//            if (!UnlitMaterial)
+//            {
+//                UnlitMaterial = LoadObject<UMaterial>(nullptr,
+//                    TEXT("/Engine/BasicShapes/BasicShapeMaterial"));
+//            }
+//            
+//            if (UnlitMaterial)
+//            {
+//                UMaterialInstanceDynamic* RoomMaterial = UMaterialInstanceDynamic::Create(UnlitMaterial, this);
+//                RoomMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.0f, 0.0f)); // Bright red
+//                RoomMaterial->SetScalarParameterValue(TEXT("Opacity"), 1.0f); // Fully opaque
+//                RoomMesh->SetMaterial(0, RoomMaterial);
+//                UE_LOG(LogTemp, Warning, TEXT("Material applied: Red, Opaque"));
+//            }
+//            
+//            // FIX POSITION - Get the actual component location and use it
+//            if (ImagePlatePost)
+//            {
+//                FVector PlateLocation = ImagePlatePost->GetComponentLocation();
+//                
+//                UE_LOG(LogTemp, Warning, TEXT("DEBUG: ImagePlate GetComponentLocation: %s"),
+//                    *PlateLocation.ToString());
+//                
+//                // Position at the same height as the camera view
+//                FVector FinalLocation = PlateLocation;
+//                
+//                // If still at wrong Y/Z, force it to match
+//                if (FMath::Abs(FinalLocation.Y) < 1.0f && FMath::Abs(FinalLocation.Z) < 1.0f)
+//                {
+//                    // Use hardcoded values we see in logs
+//                    FinalLocation = FVector(239.859f, 12.018f, 103.732f);
+//                    UE_LOG(LogTemp, Warning, TEXT("WARNING: Using hardcoded position"));
+//                }
+//                
+//                // Offset forward for visibility
+//                FVector ForwardOffset = ImagePlatePost->GetForwardVector() * 100.0f;
+//                FinalLocation += ForwardOffset;
+//                
+//                RoomMesh->SetWorldLocation(FinalLocation);
+//                RoomMesh->SetWorldRotation(ImagePlatePost->GetComponentRotation());
+//                
+//                UE_LOG(LogTemp, Warning, TEXT("Room mesh positioned at: %s"),
+//                    *FinalLocation.ToString());
+//            }
+//            else
+//            {
+//                // Fallback if no ImagePlate
+//                for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
+//                {
+//                    APlayerStart* PlayerStart = *It;
+//                    if (PlayerStart)
+//                    {
+//                        FVector ForwardOffset = PlayerStart->GetActorForwardVector() * 350.0f;
+//                        FVector PlacementLocation = PlayerStart->GetActorLocation() + ForwardOffset + FVector(0, 0, 100);
+//                        
+//                        RoomMesh->SetWorldLocation(PlacementLocation);
+//                        RoomMesh->SetWorldRotation(PlayerStart->GetActorRotation());
+//                        
+//                        UE_LOG(LogTemp, Warning, TEXT("Room mesh positioned at PlayerStart offset: %s"),
+//                            *PlacementLocation.ToString());
+//                        break;
+//                    }
+//                }
+//            }
+//            
+//            // Ensure normal scale and visibility
+//            RoomMesh->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
+//            RoomMesh->SetVisibility(true);
+//            RoomMesh->SetHiddenInGame(false);
+//            RoomMesh->SetCastShadow(false);
+//            
+//            // Force update
+//            RoomMesh->MarkRenderStateDirty();
+//            RoomMesh->RecreateRenderState_Concurrent();
+//            
+//            // Final status report
+//            UE_LOG(LogTemp, Warning, TEXT("Room mesh loaded and configured:"));
+//            UE_LOG(LogTemp, Warning, TEXT("   %d vertices, %d triangles"),
+//                Vertices.Num(), Triangles.Num() / 3);
+//            UE_LOG(LogTemp, Warning, TEXT("   Visibility: %s"),
+//                RoomMesh->IsVisible() ? TEXT("YES") : TEXT("NO"));
+//            UE_LOG(LogTemp, Warning, TEXT("   Final Location: %s"),
+//                *RoomMesh->GetComponentLocation().ToString());
+//            UE_LOG(LogTemp, Warning, TEXT("   Final Scale: %s"),
+//                *RoomMesh->GetComponentScale().ToString());
+//            UE_LOG(LogTemp, Warning, TEXT("   Final Bounds Size: %s"),
+//                *RoomMesh->Bounds.GetBox().GetSize().ToString());
+//        }
+//    }
+//}
 
 void AFurniLife::LoadRoomMeshFromFile(const FString& OBJFileName)
 {
-    // Construct file path - try multiple locations
+    if (!RoomMesh) return;
+    
+    RoomMesh->ClearAllMeshSections();
+    
+    // CREATE A SIMPLE TEST CUBE FIRST
+    TArray<FVector> Vertices;
+    TArray<int32> Triangles;
+    TArray<FVector> Normals;
+    TArray<FVector2D> UV0;
+    TArray<FColor> VertexColors;
+    TArray<FProcMeshTangent> Tangents;
+    
+    // Create a 100x100x100 cube
+    float Size = 50.0f;
+    
+    // 8 vertices of a cube
+    Vertices.Add(FVector(-Size, -Size, -Size)); // 0
+    Vertices.Add(FVector(Size, -Size, -Size));  // 1
+    Vertices.Add(FVector(Size, Size, -Size));   // 2
+    Vertices.Add(FVector(-Size, Size, -Size));  // 3
+    Vertices.Add(FVector(-Size, -Size, Size));  // 4
+    Vertices.Add(FVector(Size, -Size, Size));   // 5
+    Vertices.Add(FVector(Size, Size, Size));    // 6
+    Vertices.Add(FVector(-Size, Size, Size));   // 7
+    
+    // 12 triangles (2 per face, 6 faces)
+    // Bottom face
+    Triangles.Add(0); Triangles.Add(2); Triangles.Add(1);
+    Triangles.Add(0); Triangles.Add(3); Triangles.Add(2);
+    // Top face
+    Triangles.Add(4); Triangles.Add(5); Triangles.Add(6);
+    Triangles.Add(4); Triangles.Add(6); Triangles.Add(7);
+    // Front face
+    Triangles.Add(0); Triangles.Add(1); Triangles.Add(5);
+    Triangles.Add(0); Triangles.Add(5); Triangles.Add(4);
+    // Back face
+    Triangles.Add(2); Triangles.Add(3); Triangles.Add(7);
+    Triangles.Add(2); Triangles.Add(7); Triangles.Add(6);
+    // Left face
+    Triangles.Add(0); Triangles.Add(4); Triangles.Add(7);
+    Triangles.Add(0); Triangles.Add(7); Triangles.Add(3);
+    // Right face
+    Triangles.Add(1); Triangles.Add(2); Triangles.Add(6);
+    Triangles.Add(1); Triangles.Add(6); Triangles.Add(5);
+    
+    // Simple normals and colors
+    for (int32 i = 0; i < Vertices.Num(); i++)
+    {
+        Normals.Add(FVector(0, 0, 1));
+        UV0.Add(FVector2D(0, 0));
+        VertexColors.Add(FColor(255, 0, 0, 255)); // Bright red
+    }
+    
+    // Create mesh section
+    RoomMesh->CreateMeshSection(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, false);
+    
+    // Use unlit material so it's always visible
+    UMaterial* UnlitMaterial = LoadObject<UMaterial>(nullptr,
+        TEXT("/Engine/EngineMaterials/UnlitMaterial"));
+    
+    if (!UnlitMaterial)
+    {
+        UnlitMaterial = LoadObject<UMaterial>(nullptr,
+            TEXT("/Engine/BasicShapes/BasicShapeMaterial"));
+    }
+    
+    if (UnlitMaterial)
+    {
+        UMaterialInstanceDynamic* TestMaterial = UMaterialInstanceDynamic::Create(UnlitMaterial, this);
+        TestMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
+        RoomMesh->SetMaterial(0, TestMaterial);
+    }
+    
+    // Position right in front of camera
+    FVector CameraPosition = FVector(239.859f, 12.018f, 103.732f);
+    FVector TestCubePosition = CameraPosition + FVector(200, 0, 0); // 200 units forward
+    
+    RoomMesh->SetWorldLocation(TestCubePosition);
+    RoomMesh->SetWorldRotation(FRotator::ZeroRotator);
+    RoomMesh->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
+    RoomMesh->SetVisibility(true);
+    RoomMesh->SetHiddenInGame(false);
+    
+    UE_LOG(LogTemp, Warning, TEXT("TEST CUBE created at: %s"), *TestCubePosition.ToString());
+    UE_LOG(LogTemp, Warning, TEXT("Cube size: 100x100x100 units"));
+    UE_LOG(LogTemp, Warning, TEXT("Cube visible: %s"), RoomMesh->IsVisible() ? TEXT("YES") : TEXT("NO"));
+    
+    // Now try to load the actual OBJ file with proper scaling
     TArray<FString> PossiblePaths = {
         FPaths::ProjectSavedDir() / TEXT("ExportedMeshes") / (OBJFileName + TEXT(".obj")),
         FPaths::ProjectContentDir() / TEXT("Models") / (OBJFileName + TEXT(".obj")),
@@ -305,112 +572,13 @@ void AFurniLife::LoadRoomMeshFromFile(const FString& OBJFileName)
     };
     
     FString FilePath;
-    bool bFileFound = false;
-    
     for (const FString& Path : PossiblePaths)
     {
         if (FPaths::FileExists(Path))
         {
             FilePath = Path;
-            bFileFound = true;
-            UE_LOG(LogTemp, Warning, TEXT("✅ Found OBJ file at: %s"), *FilePath);
+            UE_LOG(LogTemp, Warning, TEXT("Will load OBJ after showing test cube: %s"), *FilePath);
             break;
-        }
-    }
-    
-    if (!bFileFound)
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ OBJ file '%s' not found. Tried paths:"), *OBJFileName);
-        for (const FString& Path : PossiblePaths)
-        {
-            UE_LOG(LogTemp, Error, TEXT("  - %s"), *Path);
-        }
-        return;
-    }
-    
-    TArray<FVector> Vertices;
-    TArray<int32> Triangles;
-    TArray<FVector> Normals;
-    
-    if (ParseOBJFile(FilePath, Vertices, Triangles, Normals))
-    {
-        // Clear existing mesh
-        if (RoomMesh)
-        {
-            RoomMesh->ClearAllMeshSections();
-            
-            // Create mesh arrays
-            TArray<FVector2D> UV0;
-            TArray<FColor> VertexColors;
-            TArray<FProcMeshTangent> Tangents;
-            
-            for (int32 i = 0; i < Vertices.Num(); i++)
-            {
-                UV0.Add(FVector2D(0, 0));
-                VertexColors.Add(FColor(200, 200, 255, 255)); // Light blue tint
-            }
-            
-            // Create the mesh section
-            RoomMesh->CreateMeshSection(
-                0,
-                Vertices,
-                Triangles,
-                Normals,
-                UV0,
-                VertexColors,
-                Tangents,
-                false
-            );
-            
-            // Create and apply a semi-transparent material
-            UMaterial* BaseMaterial = LoadObject<UMaterial>(nullptr,
-                TEXT("/Engine/BasicShapes/BasicShapeMaterial"));
-            
-            if (BaseMaterial)
-            {
-                UMaterialInstanceDynamic* RoomMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-                RoomMaterial->SetScalarParameterValue(TEXT("Opacity"), RoomMeshOpacity);
-                RoomMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.7f, 0.7f, 1.0f, RoomMeshOpacity));
-                RoomMaterial->SetScalarParameterValue(TEXT("Metallic"), 0.0f);
-                RoomMaterial->SetScalarParameterValue(TEXT("Roughness"), 0.8f);
-                RoomMesh->SetMaterial(0, RoomMaterial);
-            }
-            
-            // Position the mesh relative to ImagePlate
-            if (ImagePlatePost)
-            {
-                FVector PlateLocation = ImagePlatePost->GetComponentLocation();
-                FRotator PlateRotation = ImagePlatePost->GetComponentRotation();
-                
-                // Center the room mesh on the image plate
-                RoomMesh->SetWorldLocation(PlateLocation);
-                RoomMesh->SetWorldRotation(PlateRotation);
-                
-                // Scale it appropriately
-                RoomMesh->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
-            }
-            else
-            {
-                // If no ImagePlate yet, position relative to player start
-                for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
-                {
-                    APlayerStart* PlayerStart = *It;
-                    if (PlayerStart)
-                    {
-                        FVector ForwardOffset = PlayerStart->GetActorForwardVector() * 300.0f;
-                        FVector PlacementLocation = PlayerStart->GetActorLocation() + ForwardOffset;
-                        
-                        RoomMesh->SetWorldLocation(PlacementLocation);
-                        RoomMesh->SetWorldRotation(PlayerStart->GetActorRotation());
-                        break;
-                    }
-                }
-            }
-            
-            RoomMesh->SetVisibility(bShowRoomMesh);
-            
-            UE_LOG(LogTemp, Warning, TEXT("✅ Room mesh loaded: %d vertices, %d triangles"),
-                Vertices.Num(), Triangles.Num() / 3);
         }
     }
 }
@@ -504,7 +672,7 @@ void AFurniLife::ToggleRoomMeshVisibility()
     {
         bShowRoomMesh = !bShowRoomMesh;
         RoomMesh->SetVisibility(bShowRoomMesh);
-        UE_LOG(LogTemp, Warning, TEXT("Room mesh visibility: %s"),
+        UE_LOG(LogTemp, Warning, TEXT("Room mesh visibility toggled: %s"),
             bShowRoomMesh ? TEXT("ON") : TEXT("OFF"));
     }
 }
@@ -512,6 +680,37 @@ void AFurniLife::ToggleRoomMeshVisibility()
 void AFurniLife::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+    
+    // Debug: Log mesh status every 2 seconds
+    MeshDebugTimer += DeltaTime;
+    if (MeshDebugTimer > 2.0f && RoomMesh)
+    {
+        MeshDebugTimer = 0;
+        
+        FBoxSphereBounds Bounds = RoomMesh->Bounds;
+        int32 NumSections = RoomMesh->GetNumSections();
+        
+        UE_LOG(LogTemp, Warning, TEXT("=== ROOM MESH DEBUG ==="));
+        UE_LOG(LogTemp, Warning, TEXT("  Visible: %s"),
+            RoomMesh->IsVisible() ? TEXT("YES") : TEXT("NO"));
+        UE_LOG(LogTemp, Warning, TEXT("  Location: %s"),
+            *RoomMesh->GetComponentLocation().ToString());
+        UE_LOG(LogTemp, Warning, TEXT("  Bounds Size: %s"),
+            *Bounds.GetBox().GetSize().ToString());
+        UE_LOG(LogTemp, Warning, TEXT("  Bounds Center: %s"),
+            *Bounds.Origin.ToString());
+        UE_LOG(LogTemp, Warning, TEXT("  Num Sections: %d"), NumSections);
+        
+        if (NumSections > 0)
+        {
+            FProcMeshSection* Section = RoomMesh->GetProcMeshSection(0);
+            if (Section)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("  Section 0 Vertices: %d"),
+                    Section->ProcVertexBuffer.Num());
+            }
+        }
+    }
     
     if (!isStreamOpen)
         return;
@@ -529,7 +728,7 @@ void AFurniLife::Tick(float DeltaTime)
         static int FrameCount = 0;
         if (++FrameCount % 30 == 0)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Frame %d: %s, Texture: %s, Material: %s, ImagePlate: %s"),
+            UE_LOG(LogTemp, VeryVerbose, TEXT("Frame %d: %s, Texture: %s, Material: %s, ImagePlate: %s"),
                 FrameCount,
                 success ? TEXT("OK") : TEXT("FAILED"),
                 Camera_Texture2D ? TEXT("Valid") : TEXT("NULL"),
@@ -539,6 +738,7 @@ void AFurniLife::Tick(float DeltaTime)
     }
 }
 
+// Rest of the methods remain the same...
 bool AFurniLife::ReadFrame()
 {
     if (!cap.isOpened())
@@ -792,9 +992,6 @@ void AFurniLife::ApplySegmentationMask()
             }
         }
         
-        // Get bounding box of the person
-        cv::Rect personBounds = cv::boundingRect(contours[largestIdx]);
-        
         // Draw the largest contour filled
         cv::drawContours(filledMask, contours, largestIdx, cv::Scalar(255), cv::FILLED);
         
@@ -945,7 +1142,7 @@ void AFurniLife::UpdateImagePlatePosition(const cv::Rect& personBounds, int mask
     static int LogCounter = 0;
     if (++LogCounter % 30 == 0) // Log every 30 frames
     {
-        UE_LOG(LogTemp, Warning, TEXT("Person at (%.2f, %.2f), Size: %.2f%%, ImagePlate at: %s"),
+        UE_LOG(LogTemp, VeryVerbose, TEXT("Person at (%.2f, %.2f), Size: %.2f%%, ImagePlate at: %s"),
                normalizedX, normalizedY, personSizeRatio * 100,
                *SmoothedPosition.ToString());
     }

@@ -121,6 +121,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room")
     bool bShowRoomMesh = true;
     
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room")
+    float RoomMeshScale = 100.0f;
+    
     UFUNCTION(BlueprintCallable, Category = "Room")
     void LoadRoomMeshFromFile(const FString& OBJFileName);
     
@@ -144,6 +147,9 @@ private:
     cv::Mat alphaMask;
     cv::Size cvSize;
     cv::Mat cvMat;
+    
+    // Debug timer
+    float MeshDebugTimer = 0.0f;
     
     // Private methods
     void InitializeCamera();
