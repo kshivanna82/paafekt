@@ -220,7 +220,7 @@ public class IntelliSpace : ModuleRules
 
             PublicFrameworks.AddRange(new string[]
             {
-                "Accelerate", "AVFoundation", "CoreMedia", "CoreVideo", "CoreML", "UIKit", "Vision", "Foundation"
+                "Accelerate", "AVFoundation", "CoreMedia", "CoreVideo", "CoreML", "UIKit", "Vision", "Foundation", "ARKit"
             });
       
             //PrivateIncludePaths.Add("IntelliSpace/Private");
@@ -233,7 +233,7 @@ public class IntelliSpace : ModuleRules
 
         PublicDependencyModuleNames.AddRange(new string[]
         {
-                "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate", "Projects", "CinematicCamera", "UMG", "Slate", "SlateCore", "Json", "HTTP"
+                "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate", "Projects", "CinematicCamera", "ProceduralMeshComponent", "UMG", "Slate", "SlateCore", "Json", "HTTP"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[]
