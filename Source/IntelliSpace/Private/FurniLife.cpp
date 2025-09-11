@@ -8,6 +8,8 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "Rendering/Texture2DResource.h"
 #include "ImagePlateComponent.h"
+#include "ProceduralMeshComponent.h"
+#include "KismetProceduralMeshLibrary.h"
 #if PLATFORM_IOS
 #include <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
@@ -32,6 +34,11 @@ AFurniLife::AFurniLife(const FObjectInitializer& ObjectInitializer) : Super(Obje
     // Create root component
     rootComp = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
     SetRootComponent(rootComp);
+    
+    // Create procedural mesh component for room
+    RoomMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("RoomMesh"));
+    RoomMesh->SetupAttachment(rootComp);
+    RoomMesh->bUseComplexAsSimpleCollision = false;
     
     // DON'T create ImagePlate in constructor - do it dynamically
     ImagePlatePost = nullptr;
@@ -92,17 +99,32 @@ void AFurniLife::BeginPlay()
             if (granted) {
                 AsyncTask(ENamedThreads::GameThread, [this]() {
                     InitializeCamera();
+                    // Load OBJ after camera init
+                    if (!DefaultOBJFile.IsEmpty())
+                    {
+                        LoadRoomMeshFromFile(DefaultOBJFile);
+                    }
                 });
             }
         }];
     } else if (status == AVAuthorizationStatusAuthorized) {
         UE_LOG(LogTemp, Warning, TEXT("Camera already authorized"));
         InitializeCamera();
+        // Load OBJ after camera init
+        if (!DefaultOBJFile.IsEmpty())
+        {
+            LoadRoomMeshFromFile(DefaultOBJFile);
+        }
     } else {
         UE_LOG(LogTemp, Error, TEXT("Camera permission denied or restricted. Status: %d"), (int)status);
     }
 #else
     InitializeCamera();
+    // Load OBJ after camera init
+    if (!DefaultOBJFile.IsEmpty())
+    {
+        LoadRoomMeshFromFile(DefaultOBJFile);
+    }
 #endif
 }
 
@@ -247,6 +269,16 @@ void AFurniLife::InitializeCamera()
         break;
     }
     
+    // Position room mesh if it exists
+    if (RoomMesh && ImagePlatePost)
+    {
+        FVector PlateLocation = ImagePlatePost->GetComponentLocation();
+        RoomMesh->SetWorldLocation(PlateLocation);
+        RoomMesh->SetWorldRotation(ImagePlatePost->GetComponentRotation());
+        
+        UE_LOG(LogTemp, Warning, TEXT("Room mesh positioned with ImagePlate"));
+    }
+    
 #if PLATFORM_IOS
     // Load CoreML model
     NSString* ModelPath = [[NSBundle mainBundle] pathForResource:@"u2net" ofType:@"mlmodelc"];
@@ -260,6 +292,221 @@ void AFurniLife::InitializeCamera()
 #endif
     
     UE_LOG(LogTemp, Warning, TEXT("✅ Camera initialization complete"));
+}
+
+void AFurniLife::LoadRoomMeshFromFile(const FString& OBJFileName)
+{
+    // Construct file path - try multiple locations
+    TArray<FString> PossiblePaths = {
+        FPaths::ProjectSavedDir() / TEXT("ExportedMeshes") / (OBJFileName + TEXT(".obj")),
+        FPaths::ProjectContentDir() / TEXT("Models") / (OBJFileName + TEXT(".obj")),
+        FPaths::ProjectContentDir() / (OBJFileName + TEXT(".obj")),
+        FPaths::ProjectDir() / (OBJFileName + TEXT(".obj"))
+    };
+    
+    FString FilePath;
+    bool bFileFound = false;
+    
+    for (const FString& Path : PossiblePaths)
+    {
+        if (FPaths::FileExists(Path))
+        {
+            FilePath = Path;
+            bFileFound = true;
+            UE_LOG(LogTemp, Warning, TEXT("✅ Found OBJ file at: %s"), *FilePath);
+            break;
+        }
+    }
+    
+    if (!bFileFound)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ OBJ file '%s' not found. Tried paths:"), *OBJFileName);
+        for (const FString& Path : PossiblePaths)
+        {
+            UE_LOG(LogTemp, Error, TEXT("  - %s"), *Path);
+        }
+        return;
+    }
+    
+    TArray<FVector> Vertices;
+    TArray<int32> Triangles;
+    TArray<FVector> Normals;
+    
+    if (ParseOBJFile(FilePath, Vertices, Triangles, Normals))
+    {
+        // Clear existing mesh
+        if (RoomMesh)
+        {
+            RoomMesh->ClearAllMeshSections();
+            
+            // Create mesh arrays
+            TArray<FVector2D> UV0;
+            TArray<FColor> VertexColors;
+            TArray<FProcMeshTangent> Tangents;
+            
+            for (int32 i = 0; i < Vertices.Num(); i++)
+            {
+                UV0.Add(FVector2D(0, 0));
+                VertexColors.Add(FColor(200, 200, 255, 255)); // Light blue tint
+            }
+            
+            // Create the mesh section
+            RoomMesh->CreateMeshSection(
+                0,
+                Vertices,
+                Triangles,
+                Normals,
+                UV0,
+                VertexColors,
+                Tangents,
+                false
+            );
+            
+            // Create and apply a semi-transparent material
+            UMaterial* BaseMaterial = LoadObject<UMaterial>(nullptr,
+                TEXT("/Engine/BasicShapes/BasicShapeMaterial"));
+            
+            if (BaseMaterial)
+            {
+                UMaterialInstanceDynamic* RoomMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+                RoomMaterial->SetScalarParameterValue(TEXT("Opacity"), RoomMeshOpacity);
+                RoomMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.7f, 0.7f, 1.0f, RoomMeshOpacity));
+                RoomMaterial->SetScalarParameterValue(TEXT("Metallic"), 0.0f);
+                RoomMaterial->SetScalarParameterValue(TEXT("Roughness"), 0.8f);
+                RoomMesh->SetMaterial(0, RoomMaterial);
+            }
+            
+            // Position the mesh relative to ImagePlate
+            if (ImagePlatePost)
+            {
+                FVector PlateLocation = ImagePlatePost->GetComponentLocation();
+                FRotator PlateRotation = ImagePlatePost->GetComponentRotation();
+                
+                // Center the room mesh on the image plate
+                RoomMesh->SetWorldLocation(PlateLocation);
+                RoomMesh->SetWorldRotation(PlateRotation);
+                
+                // Scale it appropriately
+                RoomMesh->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
+            }
+            else
+            {
+                // If no ImagePlate yet, position relative to player start
+                for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
+                {
+                    APlayerStart* PlayerStart = *It;
+                    if (PlayerStart)
+                    {
+                        FVector ForwardOffset = PlayerStart->GetActorForwardVector() * 300.0f;
+                        FVector PlacementLocation = PlayerStart->GetActorLocation() + ForwardOffset;
+                        
+                        RoomMesh->SetWorldLocation(PlacementLocation);
+                        RoomMesh->SetWorldRotation(PlayerStart->GetActorRotation());
+                        break;
+                    }
+                }
+            }
+            
+            RoomMesh->SetVisibility(bShowRoomMesh);
+            
+            UE_LOG(LogTemp, Warning, TEXT("✅ Room mesh loaded: %d vertices, %d triangles"),
+                Vertices.Num(), Triangles.Num() / 3);
+        }
+    }
+}
+
+bool AFurniLife::ParseOBJFile(const FString& FilePath, TArray<FVector>& OutVertices,
+                              TArray<int32>& OutTriangles, TArray<FVector>& OutNormals)
+{
+    FString FileContent;
+    if (!FFileHelper::LoadFileToString(FileContent, *FilePath))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to load OBJ file"));
+        return false;
+    }
+    
+    TArray<FString> Lines;
+    FileContent.ParseIntoArrayLines(Lines);
+    
+    for (const FString& Line : Lines)
+    {
+        TArray<FString> Parts;
+        Line.ParseIntoArray(Parts, TEXT(" "), true);
+        
+        if (Parts.Num() > 0)
+        {
+            if (Parts[0] == TEXT("v") && Parts.Num() >= 4)
+            {
+                // Parse vertex
+                OutVertices.Add(FVector(
+                    FCString::Atof(*Parts[1]),
+                    FCString::Atof(*Parts[2]),
+                    FCString::Atof(*Parts[3])
+                ));
+            }
+            else if (Parts[0] == TEXT("vn") && Parts.Num() >= 4)
+            {
+                // Parse normal
+                OutNormals.Add(FVector(
+                    FCString::Atof(*Parts[1]),
+                    FCString::Atof(*Parts[2]),
+                    FCString::Atof(*Parts[3])
+                ));
+            }
+            else if (Parts[0] == TEXT("f") && Parts.Num() >= 4)
+            {
+                // Parse face (assuming triangles)
+                for (int32 i = 1; i <= 3; i++)
+                {
+                    FString FacePart = Parts[i];
+                    FString VertexIndexStr;
+                    
+                    // Handle different face formats: v, v/vt, v//vn, v/vt/vn
+                    if (FacePart.Contains(TEXT("//")))
+                    {
+                        VertexIndexStr = FacePart.Left(FacePart.Find(TEXT("//")));
+                    }
+                    else if (FacePart.Contains(TEXT("/")))
+                    {
+                        VertexIndexStr = FacePart.Left(FacePart.Find(TEXT("/")));
+                    }
+                    else
+                    {
+                        VertexIndexStr = FacePart;
+                    }
+                    
+                    int32 VertexIndex = FCString::Atoi(*VertexIndexStr) - 1; // OBJ uses 1-based indexing
+                    OutTriangles.Add(VertexIndex);
+                }
+            }
+        }
+    }
+    
+    // If no normals were provided, generate them
+    if (OutNormals.Num() == 0 && OutVertices.Num() > 0)
+    {
+        OutNormals.SetNum(OutVertices.Num());
+        for (int32 i = 0; i < OutNormals.Num(); i++)
+        {
+            OutNormals[i] = FVector(0, 0, 1); // Default up normal
+        }
+    }
+    
+    UE_LOG(LogTemp, Warning, TEXT("Parsed OBJ: %d vertices, %d triangles, %d normals"),
+        OutVertices.Num(), OutTriangles.Num() / 3, OutNormals.Num());
+    
+    return OutVertices.Num() > 0 && OutTriangles.Num() > 0;
+}
+
+void AFurniLife::ToggleRoomMeshVisibility()
+{
+    if (RoomMesh)
+    {
+        bShowRoomMesh = !bShowRoomMesh;
+        RoomMesh->SetVisibility(bShowRoomMesh);
+        UE_LOG(LogTemp, Warning, TEXT("Room mesh visibility: %s"),
+            bShowRoomMesh ? TEXT("ON") : TEXT("OFF"));
+    }
 }
 
 void AFurniLife::Tick(float DeltaTime)
@@ -548,9 +795,6 @@ void AFurniLife::ApplySegmentationMask()
         // Get bounding box of the person
         cv::Rect personBounds = cv::boundingRect(contours[largestIdx]);
         
-        // DYNAMIC IMAGEPLATE POSITIONING - pass Width and Height as parameters
-        UpdateImagePlatePosition(personBounds, Width, Height);
-        
         // Draw the largest contour filled
         cv::drawContours(filledMask, contours, largestIdx, cv::Scalar(255), cv::FILLED);
         
@@ -624,7 +868,6 @@ void AFurniLife::ApplySegmentationMask()
     }
 }
 
-// Add this new method to your class
 void AFurniLife::UpdateImagePlatePosition(const cv::Rect& personBounds, int maskWidth, int maskHeight)
 {
     if (!ImagePlatePost)
@@ -854,7 +1097,6 @@ float AFurniLife::CalculateSegmentationConfidence(const cv::Mat& mask, uchar thr
 
 uchar AFurniLife::ApplyTemporalSmoothing(uchar currentThreshold)
 {
-    static std::deque<uchar> thresholdHistory;
     const int historySize = 5;
     
     thresholdHistory.push_back(currentThreshold);
@@ -868,8 +1110,6 @@ uchar AFurniLife::ApplyTemporalSmoothing(uchar currentThreshold)
     std::sort(sortedHistory.begin(), sortedHistory.end());
     
     uchar medianThreshold = sortedHistory[sortedHistory.size() / 2];
-    
-    static float smoothedThreshold = -1.0f;
     
     if (smoothedThreshold < 0)
     {

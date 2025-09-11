@@ -12,6 +12,7 @@
 #define check(expr) UE_CHECK_IMPL(expr)
 
 #include "ImagePlateComponent.h"
+#include "ProceduralMeshComponent.h"
 
 #include "Templates/UniquePtr.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -62,7 +63,7 @@ public:
     UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera, meta = (ClampMin = 0, UIMin = 0))
     float RefreshRate;
     
-    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Camera)
+    UPROPERTY(BluePrintReadWrite, EditAnywhere, Category = Camera)
     FVector2D VideoSize;
     
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera)
@@ -107,6 +108,25 @@ public:
     UPROPERTY(BlueprintReadWrite, VisibleAnyWhere, Category = Camera)
     TArray<FColor> ColorData;
     
+    // Room mesh components
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Room")
+    UProceduralMeshComponent* RoomMesh;
+    
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Room")
+    FString DefaultOBJFile = TEXT("testtt");
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room")
+    float RoomMeshOpacity = 0.3f;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room")
+    bool bShowRoomMesh = true;
+    
+    UFUNCTION(BlueprintCallable, Category = "Room")
+    void LoadRoomMeshFromFile(const FString& OBJFileName);
+    
+    UFUNCTION(BlueprintCallable, Category = "Room")
+    void ToggleRoomMeshVisibility();
+    
     // Static instance
     static AFurniLife* CurrentInstance;
     
@@ -131,7 +151,7 @@ private:
     void RunModelInference();
     void ApplySegmentationMask();
     void UpdateTextureSafely();
-    void AssignTextureToImagePlate();  // Added for iOS fix
+    void AssignTextureToImagePlate();
     void UpdateImagePlateTexture();
     
     uchar CalculateSmartThreshold(const cv::Mat& mask);
@@ -143,11 +163,15 @@ private:
     uchar ApplyTemporalSmoothing(uchar currentThreshold);
     
     // Member variables for threshold calculation
-    bool bDebugMode = false;  // Enable debug logging for threshold selection
-    std::deque<uchar> thresholdHistory;  // For temporal smoothing
-    float smoothedThreshold = -1.0f;  // For exponential moving average
+    bool bDebugMode = false;
+    std::deque<uchar> thresholdHistory;
+    float smoothedThreshold = -1.0f;
     
     void UpdateImagePlatePosition(const cv::Rect& personBounds, int maskWidth, int maskHeight);
+    
+    // OBJ parsing
+    bool ParseOBJFile(const FString& FilePath, TArray<FVector>& OutVertices,
+                      TArray<int32>& OutTriangles, TArray<FVector>& OutNormals);
     
 #if PLATFORM_MAC
     TWeakInterfacePtr<INNERuntimeCPU> CpuRuntime;
