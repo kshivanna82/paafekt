@@ -135,6 +135,16 @@ public:
     
     // iOS specific callback
     void OnCameraFrameFromPixelBuffer(CVPixelBufferRef buffer);
+    
+    // In the public section, add:
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    class UUserWidget* MenuWidget;
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void CreateMenuButton();
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void OnMenuButtonClicked();
 
 protected:
     virtual void BeginPlay() override;

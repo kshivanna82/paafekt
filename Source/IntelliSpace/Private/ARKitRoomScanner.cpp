@@ -1,7 +1,36 @@
 // Class header MUST be first for Unreal
 #include "ARKitRoomScanner.h"
 
-// Then undefine Apple macros before OpenCV
+// Include ALL Unreal Engine headers BEFORE undefining macros
+#include "Components/Button.h"
+#include "ProceduralMeshComponent.h"
+#include "ImagePlateComponent.h"
+#include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Engine/Texture2D.h"
+#include "Engine/World.h"
+#include "Blueprint/UserWidget.h"
+#include "Kismet/GameplayStatics.h"
+#include "Engine/DirectionalLight.h"
+#include "Engine/SkyLight.h"
+#include "Components/LightComponent.h"
+#include "Components/SkyLightComponent.h"
+#include "EngineUtils.h"
+#include "Engine/Engine.h"
+#include "Runtime/Engine/Classes/Engine/GameViewportClient.h"
+#include "GameFramework/PlayerController.h"
+#include "RenderUtils.h"
+#include "RHI.h"
+#include "GlobalShader.h"
+#include "RHIStaticStates.h"
+#include "SceneInterface.h"
+#include "ShaderParameterUtils.h"
+#include "Logging/MessageLog.h"
+#include "Internationalization/Internationalization.h"
+#include "Misc/FileHelper.h"
+#include "HAL/PlatformFilemanager.h"
+
+// NOW undefine Apple macros AFTER all Unreal includes but BEFORE OpenCV
 #ifdef NO
     #undef NO
 #endif
@@ -12,20 +41,10 @@
     #undef check
 #endif
 
-// Now include OpenCV
+// Now include OpenCV (after undefining conflicting macros)
 #include <opencv2/opencv.hpp>
 
-// Then other includes
-#include "ProceduralMeshComponent.h"
-#include "ImagePlateComponent.h"
-#include "Materials/MaterialInterface.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "Engine/Texture2D.h"
-#include "Engine/World.h"
-#include "Blueprint/UserWidget.h"
-#include "Kismet/GameplayStatics.h"
-
-// Redefine for Objective-C use
+// Redefine for Objective-C use (but not check - leave it undefined)
 #if PLATFORM_IOS
 #define YES 1
 #define NO 0
@@ -36,6 +55,8 @@
 #import <ARKit/ARKit.h>
 #import <MetalKit/MetalKit.h>
 #import <ModelIO/ModelIO.h>
+#import <AVFoundation/AVFoundation.h>
+#import <CoreVideo/CoreVideo.h>
 
 @interface ARKitDelegate : NSObject<ARSessionDelegate>
 @property (nonatomic, assign) AARKitRoomScanner* Owner;
@@ -173,6 +194,54 @@ void AARKitRoomScanner::BeginPlay()
     Super::BeginPlay();
     
     UE_LOG(LogTemp, Warning, TEXT("=== ARKitRoomScanner BeginPlay START ==="));
+    
+    // Check for existing lights and add if needed
+    bool bHasDirectionalLight = false;
+    bool bHasSkyLight = false;
+    
+    for (TActorIterator<ADirectionalLight> DirIt(GetWorld()); DirIt; ++DirIt)
+    {
+        bHasDirectionalLight = true;
+        break;
+    }
+    
+    for (TActorIterator<ASkyLight> SkyIt(GetWorld()); SkyIt; ++SkyIt)
+    {
+        bHasSkyLight = true;
+        break;
+    }
+    
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    
+    // Add sky light for ambient lighting
+    if (!bHasSkyLight)
+    {
+        ASkyLight* SkyLight = GetWorld()->SpawnActor<ASkyLight>(ASkyLight::StaticClass(), SpawnParams);
+        if (SkyLight && SkyLight->GetLightComponent())
+        {
+            SkyLight->GetLightComponent()->SetIntensity(1.0f);
+            SkyLight->GetLightComponent()->SetLightColor(FLinearColor(1.0f, 1.0f, 1.0f));
+            UE_LOG(LogTemp, Warning, TEXT("Added SkyLight for ambient lighting"));
+        }
+    }
+    
+    // Add directional light for main lighting
+    if (!bHasDirectionalLight)
+    {
+        ADirectionalLight* DirLight = GetWorld()->SpawnActor<ADirectionalLight>(
+            ADirectionalLight::StaticClass(),
+            FVector::ZeroVector,
+            FRotator(-45.0f, 45.0f, 0.0f),
+            SpawnParams);
+        
+        if (DirLight && DirLight->GetLightComponent())
+        {
+            DirLight->GetLightComponent()->SetIntensity(2.0f);
+            DirLight->GetLightComponent()->SetLightColor(FLinearColor(1.0f, 0.95f, 0.8f));
+            UE_LOG(LogTemp, Warning, TEXT("Added DirectionalLight for main lighting"));
+        }
+    }
     
     // Setup camera preview texture
     CameraTexture = UTexture2D::CreateTransient(640, 480, PF_B8G8R8A8);
@@ -730,11 +799,41 @@ void AARKitRoomScanner::CreateHUD()
     if (Widget)
     {
         Widget->AddToViewport();
+        
+        // Bind the Furni Match button
+        UButton* FurniMatchButton = Cast<UButton>(Widget->GetWidgetFromName(TEXT("Button_0")));
+        if (FurniMatchButton)
+        {
+            FurniMatchButton->OnClicked.AddDynamic(this, &AARKitRoomScanner::OnFurniMatchClicked);
+            UE_LOG(LogTemp, Warning, TEXT("✅ Furni Match button bound successfully"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ Could not find Button_0 (Furni Match) in widget"));
+        }
+        
         UE_LOG(LogTemp, Warning, TEXT("✅ HUD Widget created and added to viewport"));
     }
     else
     {
         UE_LOG(LogTemp, Error, TEXT("❌ Failed to create widget from class"));
+    }
+}
+
+void AARKitRoomScanner::OnFurniMatchClicked()
+{
+    UE_LOG(LogTemp, Warning, TEXT("=== Furni Match button clicked - Loading IntelliSpaceMap ==="));
+    
+    // Stop scanning if active
+    if (bIsScanning)
+    {
+        StopScanning();
+    }
+    
+    // Navigate to IntelliSpaceMap
+    if (GetWorld())
+    {
+        UGameplayStatics::OpenLevel(GetWorld(), TEXT("IntelliSpaceMap"));
     }
 }
 

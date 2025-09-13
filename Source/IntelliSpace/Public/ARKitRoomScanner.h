@@ -85,6 +85,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
     TSubclassOf<UUserWidget> HUDWidgetClass;
     
+    UFUNCTION()
+    void OnFurniMatchClicked();
+    
 protected:
     UPROPERTY()
     UTexture2D* CameraTexture;

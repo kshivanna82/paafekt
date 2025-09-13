@@ -17,6 +17,15 @@
 #import <UIKit/UIKit.h>
 #import "CoreMLModelBridge.h"
 #endif
+
+#include "Blueprint/UserWidget.h"
+#include "Components/Button.h"
+#include "Components/TextBlock.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Blueprint/WidgetTree.h"
+
+
 #include "GameFramework/PlayerStart.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "EngineUtils.h"
@@ -127,6 +136,96 @@ void AFurniLife::BeginPlay()
         LoadRoomMeshFromFile(DefaultOBJFile);
     }
 #endif
+    CreateMenuButton();
+}
+
+//void AFurniLife::CreateMenuButton()
+//{
+//    // Delay UI creation to ensure everything is initialized
+//    if (!GetWorld()) return;
+//    
+//    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+//    if (!PC) return;
+//    
+//    // Simple button without complex widget tree manipulation
+//    UUserWidget* Widget = CreateWidget<UUserWidget>(PC, UUserWidget::StaticClass());
+//    if (!Widget)
+//    {
+//        UE_LOG(LogTemp, Warning, TEXT("Failed to create widget"));
+//        return;
+//    }
+//    
+//    // Just add the widget to viewport for now
+//    Widget->AddToViewport(1000);
+//    MenuWidget = Widget;
+//    
+//    UE_LOG(LogTemp, Warning, TEXT("Basic menu widget added"));
+//}
+
+void AFurniLife::CreateMenuButton()
+{
+    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+    if (!PC) return;
+    
+    UClass* WidgetClass = LoadClass<UUserWidget>(nullptr,
+        TEXT("/Game/UI/WBP_MenuButton.WBP_MenuButton_C"));
+    
+    if (WidgetClass)
+    {
+        MenuWidget = CreateWidget<UUserWidget>(PC, WidgetClass);
+        if (MenuWidget)
+        {
+            MenuWidget->AddToViewport(1000);
+            
+            // BIND THE BUTTON CLICK - This is what's missing!
+            // You need to find the button in the widget and bind it
+            UButton* MidasButton = Cast<UButton>(MenuWidget->GetWidgetFromName(TEXT("Button_82")));
+            if (!MidasButton)
+            {
+                // Try other possible names
+                MidasButton = Cast<UButton>(MenuWidget->GetWidgetFromName(TEXT("MidasButton")));
+            }
+            if (!MidasButton)
+            {
+                // Try generic button name
+                MidasButton = Cast<UButton>(MenuWidget->GetWidgetFromName(TEXT("Button")));
+            }
+            
+            if (MidasButton)
+            {
+                MidasButton->OnClicked.AddDynamic(this, &AFurniLife::OnMenuButtonClicked);
+                UE_LOG(LogTemp, Warning, TEXT("Button click event bound successfully"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("Could not find button in widget to bind click event"));
+            }
+            
+            UE_LOG(LogTemp, Warning, TEXT("Menu button added successfully"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to load WBP_MenuButton - check if it's saved and packaged"));
+    }
+}
+
+void AFurniLife::OnMenuButtonClicked()
+{
+    UE_LOG(LogTemp, Warning, TEXT("Menu button clicked"));
+    
+    // Check if level exists before trying to load
+    FString LevelName = TEXT("MidasLevel");
+    
+    // Use a safer level transition
+    if (GetWorld())
+    {
+        // First check if we're already transitioning
+        if (!GetWorld()->IsInSeamlessTravel())
+        {
+            UGameplayStatics::OpenLevel(GetWorld(), *LevelName);
+        }
+    }
 }
 
 void AFurniLife::InitializeCamera()
@@ -476,94 +575,7 @@ void AFurniLife::InitializeCamera()
 
 void AFurniLife::LoadRoomMeshFromFile(const FString& OBJFileName)
 {
-    if (!RoomMesh) return;
-    
-    RoomMesh->ClearAllMeshSections();
-    
-    // CREATE A SIMPLE TEST CUBE FIRST
-    TArray<FVector> Vertices;
-    TArray<int32> Triangles;
-    TArray<FVector> Normals;
-    TArray<FVector2D> UV0;
-    TArray<FColor> VertexColors;
-    TArray<FProcMeshTangent> Tangents;
-    
-    // Create a 100x100x100 cube
-    float Size = 50.0f;
-    
-    // 8 vertices of a cube
-    Vertices.Add(FVector(-Size, -Size, -Size)); // 0
-    Vertices.Add(FVector(Size, -Size, -Size));  // 1
-    Vertices.Add(FVector(Size, Size, -Size));   // 2
-    Vertices.Add(FVector(-Size, Size, -Size));  // 3
-    Vertices.Add(FVector(-Size, -Size, Size));  // 4
-    Vertices.Add(FVector(Size, -Size, Size));   // 5
-    Vertices.Add(FVector(Size, Size, Size));    // 6
-    Vertices.Add(FVector(-Size, Size, Size));   // 7
-    
-    // 12 triangles (2 per face, 6 faces)
-    // Bottom face
-    Triangles.Add(0); Triangles.Add(2); Triangles.Add(1);
-    Triangles.Add(0); Triangles.Add(3); Triangles.Add(2);
-    // Top face
-    Triangles.Add(4); Triangles.Add(5); Triangles.Add(6);
-    Triangles.Add(4); Triangles.Add(6); Triangles.Add(7);
-    // Front face
-    Triangles.Add(0); Triangles.Add(1); Triangles.Add(5);
-    Triangles.Add(0); Triangles.Add(5); Triangles.Add(4);
-    // Back face
-    Triangles.Add(2); Triangles.Add(3); Triangles.Add(7);
-    Triangles.Add(2); Triangles.Add(7); Triangles.Add(6);
-    // Left face
-    Triangles.Add(0); Triangles.Add(4); Triangles.Add(7);
-    Triangles.Add(0); Triangles.Add(7); Triangles.Add(3);
-    // Right face
-    Triangles.Add(1); Triangles.Add(2); Triangles.Add(6);
-    Triangles.Add(1); Triangles.Add(6); Triangles.Add(5);
-    
-    // Simple normals and colors
-    for (int32 i = 0; i < Vertices.Num(); i++)
-    {
-        Normals.Add(FVector(0, 0, 1));
-        UV0.Add(FVector2D(0, 0));
-        VertexColors.Add(FColor(255, 0, 0, 255)); // Bright red
-    }
-    
-    // Create mesh section
-    RoomMesh->CreateMeshSection(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, false);
-    
-    // Use unlit material so it's always visible
-    UMaterial* UnlitMaterial = LoadObject<UMaterial>(nullptr,
-        TEXT("/Engine/EngineMaterials/UnlitMaterial"));
-    
-    if (!UnlitMaterial)
-    {
-        UnlitMaterial = LoadObject<UMaterial>(nullptr,
-            TEXT("/Engine/BasicShapes/BasicShapeMaterial"));
-    }
-    
-    if (UnlitMaterial)
-    {
-        UMaterialInstanceDynamic* TestMaterial = UMaterialInstanceDynamic::Create(UnlitMaterial, this);
-        TestMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
-        RoomMesh->SetMaterial(0, TestMaterial);
-    }
-    
-    // Position right in front of camera
-    FVector CameraPosition = FVector(239.859f, 12.018f, 103.732f);
-    FVector TestCubePosition = CameraPosition + FVector(200, 0, 0); // 200 units forward
-    
-    RoomMesh->SetWorldLocation(TestCubePosition);
-    RoomMesh->SetWorldRotation(FRotator::ZeroRotator);
-    RoomMesh->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
-    RoomMesh->SetVisibility(true);
-    RoomMesh->SetHiddenInGame(false);
-    
-    UE_LOG(LogTemp, Warning, TEXT("TEST CUBE created at: %s"), *TestCubePosition.ToString());
-    UE_LOG(LogTemp, Warning, TEXT("Cube size: 100x100x100 units"));
-    UE_LOG(LogTemp, Warning, TEXT("Cube visible: %s"), RoomMesh->IsVisible() ? TEXT("YES") : TEXT("NO"));
-    
-    // Now try to load the actual OBJ file with proper scaling
+    // Find the OBJ file
     TArray<FString> PossiblePaths = {
         FPaths::ProjectSavedDir() / TEXT("ExportedMeshes") / (OBJFileName + TEXT(".obj")),
         FPaths::ProjectContentDir() / TEXT("Models") / (OBJFileName + TEXT(".obj")),
@@ -572,14 +584,250 @@ void AFurniLife::LoadRoomMeshFromFile(const FString& OBJFileName)
     };
     
     FString FilePath;
+    bool bFileFound = false;
+    
     for (const FString& Path : PossiblePaths)
     {
         if (FPaths::FileExists(Path))
         {
             FilePath = Path;
-            UE_LOG(LogTemp, Warning, TEXT("Will load OBJ after showing test cube: %s"), *FilePath);
+            bFileFound = true;
+            UE_LOG(LogTemp, Warning, TEXT("Found OBJ file at: %s"), *FilePath);
             break;
         }
+    }
+    
+    if (!bFileFound)
+    {
+        UE_LOG(LogTemp, Error, TEXT("OBJ file '%s' not found"), *OBJFileName);
+        return;
+    }
+    
+    // Parse OBJ file
+    TArray<FVector> Vertices;
+    TArray<int32> Triangles;
+    TArray<FVector> Normals;
+    TArray<FVector2D> UVs;
+    
+    FString FileContent;
+    if (!FFileHelper::LoadFileToString(FileContent, *FilePath))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to load OBJ file"));
+        return;
+    }
+    
+    TArray<FString> Lines;
+    FileContent.ParseIntoArrayLines(Lines);
+    
+    TArray<FVector> TempVertices;
+    TArray<FVector2D> TempUVs;
+    TArray<FVector> TempNormals;
+    
+    for (const FString& Line : Lines)
+    {
+        TArray<FString> Parts;
+        Line.ParseIntoArray(Parts, TEXT(" "), true);
+        
+        if (Parts.Num() > 0)
+        {
+            if (Parts[0] == TEXT("v") && Parts.Num() >= 4)
+            {
+                // Parse vertex with large scale for visibility
+                TempVertices.Add(FVector(
+                    FCString::Atof(*Parts[1]) * 20.0f,
+                    FCString::Atof(*Parts[2]) * 20.0f,
+                    FCString::Atof(*Parts[3]) * 20.0f
+                ));
+            }
+            else if (Parts[0] == TEXT("vt") && Parts.Num() >= 3)
+            {
+                // Parse texture coordinates
+                TempUVs.Add(FVector2D(
+                    FCString::Atof(*Parts[1]),
+                    1.0f - FCString::Atof(*Parts[2])  // Flip V for Unreal
+                ));
+            }
+            else if (Parts[0] == TEXT("vn") && Parts.Num() >= 4)
+            {
+                // Parse normals
+                TempNormals.Add(FVector(
+                    FCString::Atof(*Parts[1]),
+                    FCString::Atof(*Parts[2]),
+                    FCString::Atof(*Parts[3])
+                ));
+            }
+            else if (Parts[0] == TEXT("f") && Parts.Num() >= 4)
+            {
+                // Parse faces - handle v/vt/vn format
+                for (int32 i = 1; i <= 3; i++)
+                {
+                    FString FacePart = Parts[i];
+                    TArray<FString> Indices;
+                    FacePart.ParseIntoArray(Indices, TEXT("/"), false);
+                    
+                    // Get vertex index
+                    int32 VertexIndex = FCString::Atoi(*Indices[0]) - 1;
+                    if (VertexIndex >= 0 && VertexIndex < TempVertices.Num())
+                    {
+                        Vertices.Add(TempVertices[VertexIndex]);
+                    }
+                    
+                    // Get UV index if present
+                    if (Indices.Num() > 1 && !Indices[1].IsEmpty() && TempUVs.Num() > 0)
+                    {
+                        int32 UVIndex = FCString::Atoi(*Indices[1]) - 1;
+                        if (UVIndex >= 0 && UVIndex < TempUVs.Num())
+                        {
+                            UVs.Add(TempUVs[UVIndex]);
+                        }
+                        else
+                        {
+                            UVs.Add(FVector2D(0.5f, 0.5f));
+                        }
+                    }
+                    else
+                    {
+                        UVs.Add(FVector2D(0.5f, 0.5f));
+                    }
+                    
+                    // Get normal index if present
+                    if (Indices.Num() > 2 && !Indices[2].IsEmpty() && TempNormals.Num() > 0)
+                    {
+                        int32 NormalIndex = FCString::Atoi(*Indices[2]) - 1;
+                        if (NormalIndex >= 0 && NormalIndex < TempNormals.Num())
+                        {
+                            Normals.Add(TempNormals[NormalIndex]);
+                        }
+                        else
+                        {
+                            Normals.Add(FVector(0, 0, 1));
+                        }
+                    }
+                    else
+                    {
+                        Normals.Add(FVector(0, 0, 1));
+                    }
+                    
+                    Triangles.Add(Vertices.Num() - 1);
+                }
+            }
+        }
+    }
+    
+    if (RoomMesh && Vertices.Num() > 0)
+    {
+        RoomMesh->ClearAllMeshSections();
+        
+        // Center the mesh
+        FBox Bounds(Vertices);
+        FVector Center = Bounds.GetCenter();
+        for (FVector& Vertex : Vertices)
+        {
+            Vertex -= Center;
+        }
+        
+        // Calculate normals if not present
+        if (Normals.Num() == 0 && Vertices.Num() > 0)
+        {
+            Normals.SetNum(Vertices.Num());
+            
+            // Initialize all normals to zero
+            for (int32 i = 0; i < Normals.Num(); i++)
+            {
+                Normals[i] = FVector::ZeroVector;
+            }
+            
+            // Calculate face normals and add to vertex normals
+            for (int32 i = 0; i < Triangles.Num(); i += 3)
+            {
+                int32 i0 = Triangles[i];
+                int32 i1 = Triangles[i + 1];
+                int32 i2 = Triangles[i + 2];
+                
+                if (i0 < Vertices.Num() && i1 < Vertices.Num() && i2 < Vertices.Num())
+                {
+                    FVector v0 = Vertices[i0];
+                    FVector v1 = Vertices[i1];
+                    FVector v2 = Vertices[i2];
+                    
+                    FVector FaceNormal = FVector::CrossProduct(v1 - v0, v2 - v0).GetSafeNormal();
+                    
+                    Normals[i0] += FaceNormal;
+                    Normals[i1] += FaceNormal;
+                    Normals[i2] += FaceNormal;
+                }
+            }
+            
+            // Normalize all vertex normals
+            for (int32 i = 0; i < Normals.Num(); i++)
+            {
+                Normals[i] = Normals[i].GetSafeNormal();
+                if (Normals[i].IsZero())
+                {
+                    Normals[i] = FVector(0, 0, 1); // Default up normal
+                }
+            }
+        }
+        
+        TArray<FColor> VertexColors;
+        TArray<FProcMeshTangent> Tangents;
+        
+        for (int32 i = 0; i < Vertices.Num(); i++)
+        {
+            // Use white vertex colors for proper lighting
+            VertexColors.Add(FColor(255, 255, 255, 255));
+        }
+        
+        // Create mesh section
+        RoomMesh->CreateMeshSection(0, Vertices, Triangles, Normals, UVs, VertexColors, Tangents, true);
+        
+        // Use properly lit material
+        UMaterial* LitMaterial = LoadObject<UMaterial>(nullptr,
+            TEXT("/Engine/EngineMaterials/DefaultLitMaterial"));
+        
+        if (!LitMaterial)
+        {
+            LitMaterial = LoadObject<UMaterial>(nullptr,
+                TEXT("/Engine/BasicShapes/BasicShapeMaterial"));
+        }
+        
+        if (LitMaterial)
+        {
+            UMaterialInstanceDynamic* MeshMaterial = UMaterialInstanceDynamic::Create(LitMaterial, this);
+            
+            // Set proper material parameters for lighting
+            MeshMaterial->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(0.9f, 0.9f, 0.9f, 1.0f));
+            MeshMaterial->SetScalarParameterValue(TEXT("Metallic"), 0.0f);
+            MeshMaterial->SetScalarParameterValue(TEXT("Roughness"), 0.7f);
+            MeshMaterial->SetScalarParameterValue(TEXT("Specular"), 0.5f);
+            
+            RoomMesh->SetMaterial(0, MeshMaterial);
+        }
+        
+        // Enable proper lighting on the component
+        RoomMesh->SetCastShadow(true);
+        RoomMesh->bCastDynamicShadow = true;
+        RoomMesh->bAffectDynamicIndirectLighting = true;
+        RoomMesh->SetMobility(EComponentMobility::Movable);
+        
+        // Position in front of camera
+        FVector CameraPosition = FVector(239.859f, 12.018f, 103.732f);
+        FVector MeshPosition = CameraPosition + FVector(100, 0, 0);
+        
+        RoomMesh->SetWorldLocation(MeshPosition);
+        RoomMesh->SetWorldRotation(FRotator(0, 0, 0));
+        RoomMesh->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
+        RoomMesh->SetVisibility(true);
+        RoomMesh->SetHiddenInGame(false);
+        
+        RoomMesh->MarkRenderStateDirty();
+        
+        FBox FinalBounds(Vertices);
+        UE_LOG(LogTemp, Warning, TEXT("Mesh loaded successfully:"));
+        UE_LOG(LogTemp, Warning, TEXT("  Position: %s"), *MeshPosition.ToString());
+        UE_LOG(LogTemp, Warning, TEXT("  Size: %s"), *FinalBounds.GetSize().ToString());
+        UE_LOG(LogTemp, Warning, TEXT("  Vertices: %d, Triangles: %d, Normals: %d"),
+            Vertices.Num(), Triangles.Num() / 3, Normals.Num());
     }
 }
 
