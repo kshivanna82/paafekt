@@ -227,10 +227,25 @@ public class IntelliSpace : ModuleRules
             
             // Add your iOS-specific source files
             //PrivateSourceFiles.Add("Private/iOS/CustomIOSAppDelegate.cpp");
+            
+            //ExcludeSourceFileNames.Add("FurniLife_Android.cpp");
+            //ExcludeSourceFileNames.Add("ARCoreRoomScanner_Android.cpp");
                 
         }
-     
-
+        
+        if (Target.Platform == UnrealTargetPlatform.Android)
+        {
+            PublicDependencyModuleNames.AddRange(new string[] {
+                "Launch",
+                "AndroidPermission"
+            });
+            
+            // Exclude iOS files from Android build
+            //ExcludeSourceFileNames.Add("FurniLife.cpp");
+            //ExcludeSourceFileNames.Add("ARKitRoomScanner.cpp");
+            //ExcludeSourceFileNames.Add("MidasDepth.cpp");
+        }
+        
         PublicDependencyModuleNames.AddRange(new string[]
         {
                 "Core", "CoreUObject", "Engine", "InputCore", "RHI", "RenderCore", "Media", "MediaAssets", "ImagePlate", "Projects", "CinematicCamera", "ProceduralMeshComponent", "UMG", "Slate", "SlateCore", "Json", "HTTP"
